@@ -1,0 +1,21 @@
+{
+  "name": "plantir_blr",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "infra:up": "docker-compose up -d",
+    "infra:down": "docker-compose down",
+    "dev:engine": "npm run dev --workspace=apps/intelligence-engine",
+    "dev:map": "npm run dev --workspace=apps/public-map",
+    "db:migrate": "npm run migrate --workspace=packages/database"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}

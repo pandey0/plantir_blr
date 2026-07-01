@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+
+    --card: 0 0% 3%;
+    --card-foreground: 0 0% 100%;
+
+    --popover: 0 0% 3%;
+    --popover-foreground: 0 0% 100%;
+
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
+
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-black text-white antialiased selection:bg-white selection:text-black;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+.glass {
+  @apply bg-zinc-950/90 backdrop-blur-2xl border border-zinc-800;
+}
+
+.text-high-vis {
+  @apply text-white font-bold tracking-tight;
+}
+
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  background: #f1f5f9 !important;
+}
+
+/* Swiss Tactical Scrollbar */
+::-webkit-scrollbar {
+  width: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}
+
+/* Custom Marker Overrides */
+.tactical-popup .leaflet-popup-content-wrapper {
+  background: #000000 !important;
+  color: white !important;
+  border: 1px solid rgba(63, 63, 70, 0.5) !important;
+  border-radius: 8px !important;
+  padding: 0 !important;
+}
+.tactical-popup .leaflet-popup-tip {
+  background: #000000 !important;
+  border: 1px solid rgba(63, 63, 70, 0.5) !important;
+}
+.leaflet-bar {
+  border: 1px solid rgba(63, 63, 70, 0.5) !important;
+  background: #000000 !important;
+}
+.leaflet-bar a {
+  background: transparent !important;
+  color: #fff !important;
+}
+
+/* Swiss Tactical Tooltip */
+.swiss-tooltip {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+.swiss-tooltip:before {
+  display: none !important;
+}
+
+/* Metro station popup */
+.metro-popup .leaflet-popup-content-wrapper {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 16px !important;
+  padding: 0 !important;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.85) !important;
+}
+.metro-popup .leaflet-popup-content {
+  margin: 0 !important;
+  line-height: 1 !important;
+}
+.metro-popup .leaflet-popup-tip-container .leaflet-popup-tip {
+  background: #09090b !important;
+  box-shadow: none !important;
+}

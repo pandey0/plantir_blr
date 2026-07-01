@@ -1,0 +1,75 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis]
+}
+
+enum EventCategory {
+  POTHOLE
+  GARBAGE
+  WATER_LOGGING
+  TRAFFIC_INCIDENT
+  UNAUTHORIZED_CONSTRUCTION
+  STREET_LIGHT_FAILURE
+  OTHER
+}
+
+enum EventStatus {
+  REPORTED
+  VERIFIED
+  ESCALATED
+  IN_PROGRESS
+  RESOLVED
+  FRAUD
+}
+
+model Event {
+  id               String        @id @default(uuid())
+  category         EventCategory
+  status           EventStatus   @default(REPORTED)
+  confidence_score Int           @default(0)
+  
+  // We'll use a raw SQL approach for PostGIS geom column as Prisma 
+  // currently has limited built-in support for Geography types, 
+  // but we'll manage the column via migrations.
+  
+  created_at       DateTime      @default(now())
+  updated_at       DateTime      @updatedAt
+  resolved_at      DateTime?
+  
+  metadata         Json?         // Extensible field for ward_id, etc.
+  
+  reports          Report[]
+  evidence         Evidence[]
+
+  @@index([status])
+  @@index([category])
+}
+
+model Report {
+  id          String   @id @default(uuid())
+  event_id    String
+  user_id     String   // Can be an anonymous device ID or user account
+  description String?
+  created_at  DateTime @default(now())
+  
+  event       Event    @relation(fields: [event_id], references: [id])
+}
+
+model Evidence {
+  id                String   @id @default(uuid())
+  event_id          String
+  media_url         String
+  is_authority_proof Boolean  @default(false)
+  created_at        DateTime @default(now())
+  
+  event             Event    @relation(fields: [event_id], references: [id])
+}
