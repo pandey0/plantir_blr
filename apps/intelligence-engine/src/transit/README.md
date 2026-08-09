@@ -33,7 +33,7 @@ function calculateFare(from: string, to: string, mode: 'METRO' | 'BUS'): number
 
 ## Consumers
 
-`index.ts` — `GET /transit/arrivals`, `GET /transit/estimate`. No other module depends on this today.
+`app.ts` — `GET /transit/arrivals`, `GET /transit/estimate`. No other module depends on this today.
 
 ## Gotchas
 

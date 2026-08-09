@@ -1,6 +1,6 @@
 # routes — HTTP/WS route registration
 
-> Status: **`manifest.ts` exists (PLANNED extraction of registration itself)**. Today all routes are still registered inline in `../index.ts`, now with real `requireRole()` auth guards and Zod validation per handler (Phase 0 landed 2026-08-09). `manifest.ts` documents that reality — it's read by nothing yet; `index.ts`'s registration hasn't been refactored to consume it.
+> Status: **`manifest.ts` exists (PLANNED extraction of registration itself)**. Today all routes are still registered inline in `../app.ts`'s `buildApp()`, now with real `requireRole()` auth guards and Zod validation per handler (Phase 0 landed 2026-08-09). `manifest.ts` documents that reality — it's read by nothing yet; `app.ts`'s registration hasn't been refactored to consume it.
 >
 > **Ownership rule**: add/change/remove a route → update [`../../../../docs/api/intelligence-engine.md`](../../../../docs/api/intelligence-engine.md) in the same change (that's the full request/response reference; this doc only covers how routes get registered).
 
@@ -26,8 +26,8 @@ export const routeManifest = [
 ] as const;
 ```
 
-The `auth` values already match what `index.ts` actually enforces via `requireRole()` — this file documents that mapping in one place; it doesn't drive anything yet. Two things still need to happen before it's load-bearing: (1) `index.ts`'s route registration gets refactored to iterate this manifest instead of calling `fastify.get/post/patch` directly per route, and (2) a `docs:api` script reads it (plus proto comments) to regenerate `docs/api/intelligence-engine.md` instead of that file being hand-maintained.
+The `auth` values already match what `app.ts` actually enforces via `requireRole()` — this file documents that mapping in one place; it doesn't drive anything yet. Two things still need to happen before it's load-bearing: (1) `app.ts`'s route registration gets refactored to iterate this manifest instead of calling `fastify.get/post/patch` directly per route, and (2) a `docs:api` script reads it (plus proto comments) to regenerate `docs/api/intelligence-engine.md` instead of that file being hand-maintained.
 
 ## Consumers
 
-`index.ts` (bootstrap) imports and registers everything from here. Nothing imports `routes/` — it's the outermost layer.
+`app.ts` (`buildApp()`) is where this would be consumed once registration is refactored. `index.ts` (bootstrap) only calls `buildApp()` + `.listen()` — it doesn't touch routes directly. Nothing imports `routes/` today — it's the outermost layer, not yet wired to anything.

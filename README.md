@@ -6,7 +6,7 @@ A real-time city observability platform inspired by Palantir, focused on Bangalo
 
 ## 🏗️ Architecture
 
-- **`apps/intelligence-engine`**: The central "Event Engine" (Node.js/TypeScript/Fastify). Built, single instance, no auth yet.
+- **`apps/intelligence-engine`**: The central "Event Engine" (Node.js/TypeScript/Fastify). Built, single instance, JWT + role auth on mutating routes.
 - **`apps/public-map`**: The Public Observatory (Next.js + Leaflet). Built — live event pulses, ward drill-down map.
 - **`apps/citizen-app`**: The Reporting Interface (Vite + React). Stub only, not yet built.
 - **`apps/authority-portal`**: The Operational Triage (Vite + React). Stub only, not yet built.
@@ -31,6 +31,15 @@ npm run db:migrate
 ```bash
 npm run dev:engine
 ```
+
+## 🧪 Testing
+
+```bash
+npm run test:unit          # no DB needed — runs in pre-commit automatically
+npm run test:integration   # needs infra:up + db:migrate first
+```
+
+Full rationale: [`docs/architecture/TESTING.md`](docs/architecture/TESTING.md).
 
 ## 🛠️ Tech Stack
 - **Database:** PostgreSQL + PostGIS (The Brain), port 5433

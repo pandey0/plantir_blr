@@ -2,13 +2,14 @@
 
 > **Ownership rule**: add/move/rename a file here → update this map in the same change. Add a new module folder → give it its own `README.md` and link it below.
 
-Fastify 5 + TypeScript (ESM) backend. Entry point `index.ts`, started via `npm run dev:engine` (nodemon + `ts-node/esm`).
+Fastify 5 + TypeScript (ESM) backend. `app.ts` builds the configured Fastify instance (`buildApp()`); `index.ts` is the thin bootstrap that calls `.listen()` — kept separate so tests can `buildApp()` and use `.inject()` without binding a real port (see `../CLAUDE.md`'s Testing section). Dev server via `npm run dev:engine` (nodemon + `ts-node/esm`).
 
 ## Current file layout (CURRENT)
 
 | File/module | Responsibility | Doc |
 |---|---|---|
-| `index.ts` | Fastify bootstrap, plugin registration, route handlers (HTTP glue only for `/report` and `/events/:id/status` — they call into `events`/`ingestion`; `GET /events` still queries Prisma directly, reads aren't required to go through `events/`) | [`intelligence-engine.md`](../../../docs/api/intelligence-engine.md) for the routes it exposes |
+| `app.ts` | Plugin registration, all route handlers (HTTP glue only for `/report` and `/events/:id/status` — they call into `events`/`ingestion`; `GET /events` still queries Prisma directly, reads aren't required to go through `events/`) | [`intelligence-engine.md`](../../../docs/api/intelligence-engine.md) for the routes it exposes |
+| `index.ts` | Bootstrap only — `buildApp()` + `.listen()`. Nothing else belongs here. | — |
 | `db.ts` | Shared `PrismaClient` singleton — every module imports this, none instantiate their own | — |
 | `ws/` | WebSocket connection hub + `broadcast()` | [`ws/README.md`](ws/README.md) |
 | `events/` | `createEvent()`, `updateStatus()` — the only code that writes to the `Event` table | [`events/README.md`](events/README.md) |

@@ -60,7 +60,7 @@ async function ingestEvent(source: Source, raw: unknown): Promise<Event>
 
 | Source | Status | Notes |
 |---|---|---|
-| `citizen-report` | **CURRENT** — `index.ts`'s `POST /report` calls `ingestEvent(citizenReportSource, request.body)` | `trustWeight: 1`. Zod schema validates `latitude`/`longitude`/`category`/`location`, matching the original inline validation exactly. |
+| `citizen-report` | **CURRENT** — `app.ts`'s `POST /report` calls `ingestEvent(citizenReportSource, request.body)` | `trustWeight: 1`. Zod schema validates `latitude`/`longitude`/`category`/`location`, matching the original inline validation exactly. Covered by `index.test.ts` (unit) and the engine's `index.integration.test.ts` (integration). |
 | `authority-bulk` | PLANNED, not scheduled | Higher `trustWeight` — authenticated authority-portal users. Needed once authority-portal is built. |
 | third-party / sensor feeds | NOT DESIGNED | Explicitly out of scope until a concrete source is chosen — do not build a generic "external API poller" abstraction speculatively. Add a new adapter only when an actual source is identified. |
 

@@ -3,13 +3,16 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "npm run test:unit --workspace=apps/intelligence-engine --workspace=packages/api-contracts",
+    "test:unit": "npm run test:unit --workspace=apps/intelligence-engine --workspace=packages/api-contracts",
+    "test:integration": "npm run test:integration --workspace=apps/intelligence-engine",
     "infra:up": "docker-compose up -d",
     "infra:down": "docker-compose down",
     "dev:engine": "npm run dev --workspace=apps/intelligence-engine",
     "dev:map": "npm run dev --workspace=apps/public-map",
     "db:migrate": "npm run migrate --workspace=packages/database",
-    "proto:generate": "cd proto && buf generate"
+    "proto:generate": "cd proto && buf generate",
+    "prepare": "husky"
   },
   "keywords": [],
   "author": "",
@@ -21,6 +24,7 @@
   ],
   "devDependencies": {
     "@bufbuild/buf": "^1.72.0",
+    "husky": "^9.1.7",
     "ts-proto": "^2.12.0"
   }
 }

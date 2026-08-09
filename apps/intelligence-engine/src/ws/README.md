@@ -1,6 +1,6 @@
 # ws — WebSocket hub
 
-> Status: **CURRENT** (extracted 2026-08-09, behavior unchanged from when it lived inline in `index.ts`).
+> Status: **CURRENT** (extracted 2026-08-09, behavior unchanged from when it lived inline in what's now `app.ts`).
 >
 > **Ownership rule**: change fan-out behavior, add a second WS route, or change the broadcast payload shape → update this doc in the same change.
 
@@ -35,4 +35,4 @@ function broadcast(payload: object): void                 // called by events/ a
 
 ## Consumers
 
-`events/` calls `broadcast()`. `index.ts` calls `registerWsHub(fastify)` once at bootstrap. Nothing else imports this module — route handlers never call `broadcast()` directly, always go through `events/` so every write path fans out consistently (once `updateStatus()` is wired up too, per that module's doc).
+`events/` calls `broadcast()`. `app.ts`'s `buildApp()` calls `registerWsHub(fastify)` once. Nothing else imports this module — route handlers never call `broadcast()` directly, always go through `events/` so every write path fans out consistently (once `updateStatus()` is wired up too, per that module's doc).

@@ -8,6 +8,7 @@ This is the entry point. Read this file first, then only the specific doc(s) bel
 | [`architecture/DATA_FLOW.md`](architecture/DATA_FLOW.md) | How an event gets from a source into the map, and how new sources plug in | System / design |
 | [`architecture/TECH_STACK.md`](architecture/TECH_STACK.md) | Tech stack per app, core architecture rules, decision log. **Major changes need user confirmation before implementation — read this before proposing one.** | System / rules |
 | [`architecture/REFERENCES.md`](architecture/REFERENCES.md) | Ideas pulled from external projects (currently: worldmonitor.app) and where each landed here | System / rules |
+| [`architecture/TESTING.md`](architecture/TESTING.md) | Testing framework, unit vs. integration tiers, what pre-commit runs | System / rules |
 | [`api/README.md`](api/README.md) | Index of per-app API docs (each independent app that exposes an API gets its own file under `api/`) | API index |
 | [`api/intelligence-engine.md`](api/intelligence-engine.md) | Every HTTP/WS endpoint intelligence-engine exposes: method, path, auth, request/response shape | API |
 | [`../apps/intelligence-engine/src/README.md`](../apps/intelligence-engine/src/README.md) | intelligence-engine's internal file layout, current vs. planned module split | Component |

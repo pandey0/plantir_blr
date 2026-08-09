@@ -8,7 +8,7 @@
 citizen (curl / future citizen-app, needs a JWT — POST /dev/token in non-prod)
         │  POST /report  { latitude, longitude, category, location }  Authorization: Bearer <token>
         ▼
-index.ts POST /report handler  (requireRole('citizen','authority'))
+app.ts POST /report handler  (requireRole('citizen','authority'))
         │  ingestEvent(citizenReportSource, request.body)
         ▼
    ┌────────────────────────────────┐
