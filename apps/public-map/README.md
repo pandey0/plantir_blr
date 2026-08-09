@@ -32,6 +32,7 @@ Next.js 14 (App Router) + Leaflet. The main UI — a public, read-only map visua
 
 ## Related docs
 
+- [`UX_SPEC.md`](UX_SPEC.md) — UI/UX design language, flows, and open design requirements.
 - [`lib/README.md`](lib/README.md), [`components/Map/README.md`](components/Map/README.md), [`components/HUD/README.md`](components/HUD/README.md) — module-level docs, same granularity as `intelligence-engine`'s (see that app's `src/README.md` for the pattern this follows).
 - [`../../docs/architecture/OVERVIEW.md`](../../docs/architecture/OVERVIEW.md) — where this app sits in the whole system.
 - [`../../docs/architecture/DATA_FLOW.md`](../../docs/architecture/DATA_FLOW.md) — how an event moves end to end.
