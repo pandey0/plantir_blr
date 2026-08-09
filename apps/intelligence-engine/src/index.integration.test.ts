@@ -783,6 +783,133 @@ describe('GET /v1/events/playback', () => {
   });
 });
 
+describe('POST /v1/events Idempotency-Key', () => {
+  // Own buildApp() instance — same rate-limit-budget reason as the other dedicated-app blocks.
+  let idemApp: FastifyInstance;
+  const idemEventIds: string[] = [];
+
+  beforeAll(async () => {
+    idemApp = buildApp();
+    await idemApp.ready();
+  });
+
+  afterEach(async () => {
+    if (idemEventIds.length > 0) {
+      // Event -> Report has no cascade delete (see docs/architecture/IMPLEMENTATION_NOTES.md) —
+      // this describe block links a Report via reporterId, so children must go first.
+      await prisma.report.deleteMany({ where: { event_id: { in: idemEventIds } } });
+      await prisma.event.deleteMany({ where: { id: { in: idemEventIds } } });
+      idemEventIds.length = 0;
+    }
+  });
+
+  afterAll(async () => {
+    await idemApp.close();
+  });
+
+  it('a retried request with the same Idempotency-Key and body replays the original response, not a second create', async () => {
+    const token = await mintToken('citizen');
+    const key = `idem-test-${Math.random().toString(36).slice(2)}`;
+    const payload = { latitude: 12.94, longitude: 77.62, category: 'TRAFFIC_INCIDENT', reporterId: 'citizen-idem-1' };
+
+    const first = await idemApp.inject({
+      method: 'POST',
+      url: '/v1/events',
+      headers: { authorization: `Bearer ${token}`, 'idempotency-key': key },
+      payload,
+    });
+    expect(first.statusCode).toBe(200);
+    const firstId = JSON.parse(first.body).event_id;
+    idemEventIds.push(firstId);
+
+    const second = await idemApp.inject({
+      method: 'POST',
+      url: '/v1/events',
+      headers: { authorization: `Bearer ${token}`, 'idempotency-key': key },
+      payload,
+    });
+    expect(second.statusCode).toBe(200);
+    expect(JSON.parse(second.body).event_id).toBe(firstId);
+
+    // Exactly one Report row exists — the second call replayed the cached response instead of
+    // calling ingestEvent()/createEvent() again (which would otherwise have attached a second
+    // Report for the same reporterId, since duplicate detection allows the SAME reporter to
+    // corroborate — dedup there is per unique user_id at scoring time, not per-request).
+    const reportCount = await prisma.report.count({ where: { event_id: firstId } });
+    expect(reportCount).toBe(1);
+  });
+
+  it('reusing a key with a DIFFERENT body returns 422, not a silent overwrite or a second create', async () => {
+    const token = await mintToken('citizen');
+    const key = `idem-conflict-${Math.random().toString(36).slice(2)}`;
+
+    const first = await idemApp.inject({
+      method: 'POST',
+      url: '/v1/events',
+      headers: { authorization: `Bearer ${token}`, 'idempotency-key': key },
+      payload: { latitude: 12.94, longitude: 77.62, category: 'TRAFFIC_INCIDENT' },
+    });
+    idemEventIds.push(JSON.parse(first.body).event_id);
+
+    const conflicting = await idemApp.inject({
+      method: 'POST',
+      url: '/v1/events',
+      headers: { authorization: `Bearer ${token}`, 'idempotency-key': key },
+      payload: { latitude: 12.94, longitude: 77.62, category: 'GARBAGE' }, // different category, same key
+    });
+    expect(conflicting.statusCode).toBe(422);
+    expect(JSON.parse(conflicting.body).error.code).toBe('IDEMPOTENCY_KEY_CONFLICT');
+  });
+
+  it('a different Idempotency-Key is treated as a genuinely independent request, not deduped by the key alone', async () => {
+    const token = await mintToken('citizen');
+    // Two DIFFERENT categories, far enough apart in coordinates too — deliberately outside
+    // duplicate/corroboration detection's 150m/same-category eligibility, so this test isolates
+    // idempotency-key behavior from that unrelated merge mechanism (see the dedicated
+    // "duplicate/corroboration detection" describe block for that behavior).
+    const first = await idemApp.inject({
+      method: 'POST',
+      url: '/v1/events',
+      headers: { authorization: `Bearer ${token}`, 'idempotency-key': `idem-a-${Math.random()}` },
+      payload: { latitude: 12.94, longitude: 77.62, category: 'TRAFFIC_INCIDENT' },
+    });
+    const second = await idemApp.inject({
+      method: 'POST',
+      url: '/v1/events',
+      headers: { authorization: `Bearer ${token}`, 'idempotency-key': `idem-b-${Math.random()}` },
+      payload: { latitude: 13.05, longitude: 77.72, category: 'WATER_LOGGING' },
+    });
+    const firstId = JSON.parse(first.body).event_id;
+    const secondId = JSON.parse(second.body).event_id;
+    idemEventIds.push(firstId, secondId);
+
+    expect(secondId).not.toBe(firstId);
+  });
+
+  it('no Idempotency-Key header behaves exactly as before (each call creates/merges independently)', async () => {
+    const token = await mintToken('citizen');
+    const res = await idemApp.inject({
+      method: 'POST',
+      url: '/v1/events',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { latitude: 12.94, longitude: 77.62, category: 'STREET_LIGHT_FAILURE' },
+    });
+    expect(res.statusCode).toBe(200);
+    idemEventIds.push(JSON.parse(res.body).event_id);
+  });
+
+  it('rejects an empty Idempotency-Key with 400', async () => {
+    const token = await mintToken('citizen');
+    const res = await idemApp.inject({
+      method: 'POST',
+      url: '/v1/events',
+      headers: { authorization: `Bearer ${token}`, 'idempotency-key': '' },
+      payload: { latitude: 12.94, longitude: 77.62, category: 'POTHOLE' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});
+
 describe('GET /v1/events/heatmap', () => {
   it('returns weighted points in the documented shape', async () => {
     const res = await app.inject({ method: 'GET', url: '/v1/events/heatmap?zoom=10' });

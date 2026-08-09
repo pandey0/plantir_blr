@@ -52,6 +52,12 @@ model Event {
 
   @@index([status])
   @@index([category])
+  @@index([created_at])
+  // Backs events/geo-query.ts's findDuplicateCandidateEventId() — the WHERE category = ? AND
+  // status = ANY(...) AND created_at >= ? query that runs on every POST /v1/events. A single
+  // composite index serves this better than Postgres combining the separate [status]/[category]
+  // indexes via a bitmap AND, since this exact 3-column combination is the query's actual shape.
+  @@index([category, status, created_at])
 }
 
 model Report {
@@ -60,8 +66,13 @@ model Report {
   user_id     String   // Can be an anonymous device ID or user account
   description String?
   created_at  DateTime @default(now())
-  
+
   event       Event    @relation(fields: [event_id], references: [id])
+
+  // Postgres does NOT auto-index foreign key columns (a common gotcha) — recalculateConfidence()
+  // queries report.findMany({ where: { event_id } }) on every event create/update, so this was a
+  // real missing index, not a precaution.
+  @@index([event_id])
 }
 
 model Evidence {
@@ -70,6 +81,10 @@ model Evidence {
   media_url         String
   is_authority_proof Boolean  @default(false)
   created_at        DateTime @default(now())
-  
+
   event             Event    @relation(fields: [event_id], references: [id])
+
+  // Same reasoning as Report.event_id above — evidence.count({ where: { event_id } }) runs on
+  // every confidence recalculation.
+  @@index([event_id])
 }

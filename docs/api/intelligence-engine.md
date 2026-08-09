@@ -27,6 +27,7 @@ Every error response has the shape `{ error: { code: string, message: string, de
 | 403 | `FORBIDDEN` | Valid JWT, wrong role |
 | 404 | `EVENT_NOT_FOUND` | `PATCH /v1/events/:id/status` on a nonexistent event |
 | 409 | `INVALID_STATUS_TRANSITION` | Illegal status transition, or lost a concurrent-update race (indistinguishable to the caller, see [`../architecture/IMPLEMENTATION_NOTES.md`](../architecture/IMPLEMENTATION_NOTES.md#concurrency)) |
+| 422 | `IDEMPOTENCY_KEY_CONFLICT` | `POST /v1/events` reused an `Idempotency-Key` with a different request body |
 | 429 | (from `@fastify/rate-limit`) | `POST /v1/events` rate limit exceeded |
 | 500 | `INTERNAL_ERROR` | Anything unexpected — logged in full server-side, generic message to the client |
 
@@ -75,6 +76,8 @@ The write is compare-and-swap (protects against two concurrent updates racing) �
 ### `POST /v1/events`
 **Auth: `citizen` or `authority` role required. Rate-limited: 10/minute per client IP.** Body (Zod-validated, `@plantir/api-contracts`' `createEventRequestSchema`): `{ latitude: number [-90,90], longitude: number [-180,180], category: EventCategory, location?: string, reporterId?: string, mediaUrls?: string[] (max 10, each a valid URL) }`. `reporterId` is caller-supplied and unverified — no real user accounts exist (see Auth section above). **Coordinates outside a generous Bangalore-metro bounding box are rejected with 400** (landed 2026-08-10, GPS-validation fraud-prevention measure — see [`../architecture/IMPLEMENTATION_NOTES.md`](../architecture/IMPLEMENTATION_NOTES.md)).
 
+**Optional `Idempotency-Key` header (landed 2026-08-10, 1–200 chars)**: a repeated call with the same key and the same body replays the original response instead of processing again; the same key with a *different* body returns **422 `IDEMPOTENCY_KEY_CONFLICT`**. In-memory, 24h TTL — see [`../architecture/IMPLEMENTATION_NOTES.md`](../architecture/IMPLEMENTATION_NOTES.md#idempotency-key-post-v1events-landed-2026-08-10).
+
 **Duplicate/corroboration detection (landed 2026-08-10)**: if a same-category, non-terminal event already exists within 150m and 6 hours, the report attaches to that event (new `Report`/`Evidence` rows) instead of creating a new `Event` — response is still `{ success: true, event_id }`, but `event_id` may equal a previous call's. Otherwise, creates an `Event` and **persists coordinates to the `geom` column** via `events.createEvent()`. Either way, `Report`/`Evidence` rows are linked as applicable and `confidence_score` is recomputed (multi-signal v2 formula — see [`../../apps/intelligence-engine/src/events/README.md`](../../apps/intelligence-engine/src/events/README.md) for exact weights; **a bare report with neither `reporterId` nor `mediaUrls` scores 0**). Broadcasts `NEW_EVENT` on a genuine create, `EVENT_UPDATED` on a merge. Verified end-to-end against a live database, including the rate limit (see [`../architecture/IMPLEMENTATION_NOTES.md`](../architecture/IMPLEMENTATION_NOTES.md#rate-limiting) for a real Fastify ordering pitfall hit while building this).
 
 ### `POST /dev/token` — non-production only, route doesn't exist when `NODE_ENV=production`
@@ -97,5 +100,4 @@ Explicit origin allowlist via `CORS_ORIGINS` env var, comma-separated. Defaults 
 
 - Real login/identity — `/dev/token` is a placeholder, not a login flow. "Major" per [`../architecture/TECH_STACK.md`](../architecture/TECH_STACK.md)'s criteria — needs confirmation before starting.
 - Reopening a `RESOLVED`/`FRAUD` event — not designed.
-- `Idempotency-Key` support on `POST /v1/events` — a literal request retry can still create a duplicate `Report`; see [`../architecture/STANDARDS_COMPLIANCE.md`](../architecture/STANDARDS_COMPLIANCE.md) row #15.
 - Camera-only uploads, user reputation scoring, AI media verification (`docs/product/VISION.md`'s Fraud Prevention section) — each needs a real product decision (upload pipeline, account system, AI vendor) not yet made.

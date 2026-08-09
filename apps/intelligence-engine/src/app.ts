@@ -35,6 +35,7 @@ import {
 } from './events/geo-query.js';
 import { getOrFetch, cacheKey } from './events/list-cache.js';
 import { ingestEvent, citizenReportSource } from './ingestion/index.js';
+import { checkIdempotency, recordIdempotency } from './events/idempotency.js';
 import { routeManifest, type Role } from './routes/manifest.js';
 import { sendError } from './errors.js';
 import { config } from './config.js';
@@ -164,9 +165,34 @@ export function buildApp(): FastifyInstance {
     },
 
     CreateEvent: async (request, reply) => {
+      // Idempotency-Key (optional, standard header name — see Stripe/Slack/etc. convention).
+      // Capped at 200 chars: a client-supplied header used only as a Map key has no reason to
+      // be arbitrarily long, and an unbounded value is a cheap memory-abuse vector.
+      const idempotencyKeyHeader = request.headers['idempotency-key'];
+      const idempotencyKey = typeof idempotencyKeyHeader === 'string' ? idempotencyKeyHeader : undefined;
+      if (idempotencyKey !== undefined && (idempotencyKey.length === 0 || idempotencyKey.length > 200)) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Idempotency-Key must be 1-200 characters');
+      }
+
+      if (idempotencyKey) {
+        const lookup = checkIdempotency(idempotencyKey, request.body);
+        if (lookup.kind === 'conflict') {
+          return sendError(reply, 422, 'IDEMPOTENCY_KEY_CONFLICT', 'Idempotency-Key was already used with a different request body');
+        }
+        if (lookup.kind === 'replay') {
+          reply.code(lookup.statusCode);
+          return lookup.body;
+        }
+      }
+
       try {
         const ev = await ingestEvent(citizenReportSource, request.body);
-        return { success: true, event_id: ev.id };
+        const result = { success: true, event_id: ev.id };
+        // Only successful creates are cached for replay — a validation failure should let the
+        // client retry with a fixed body under the same key without being permanently stuck
+        // replaying the same 400.
+        if (idempotencyKey) recordIdempotency(idempotencyKey, request.body, 200, result);
+        return result;
       } catch (err) {
         if (err instanceof z.ZodError) {
           return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid request body', err.flatten());

@@ -38,6 +38,10 @@ Multi-signal model per `docs/product/VISION.md`'s Event Confidence Engine — **
 - **Known residual race** (documented, not fixed): two fully concurrent `createEvent()` calls for the same real-world issue can still both create separate Events under Postgres's default READ COMMITTED isolation. See [`../../../../docs/architecture/IMPLEMENTATION_NOTES.md`](../../../../docs/architecture/IMPLEMENTATION_NOTES.md#duplicate--corroboration-detection-createevent-landed-2026-08-10) for why and what closing it would cost.
 - This is also this app's fraud-prevention "duplicate detection" mechanism per `docs/product/VISION.md`.
 
+## Idempotency-Key (CURRENT, landed 2026-08-10)
+
+`idempotency.ts`'s `checkIdempotency()`/`recordIdempotency()` — `app.ts`'s `CreateEvent` handler checks an optional `Idempotency-Key` request header before calling `ingestEvent()`. Same key + same request body → replays the cached `{statusCode, body}` instead of processing again. Same key + different body → `422 IDEMPOTENCY_KEY_CONFLICT`. In-memory `Map`, 24h TTL, 1000-entry cap (oldest-evicted) — same pattern as `list-cache.ts`, same "no Redis yet" reasoning. Closes `docs/architecture/STANDARDS_COMPLIANCE.md` row #15. Orthogonal to duplicate/corroboration detection above — see [`../../../../docs/architecture/IMPLEMENTATION_NOTES.md`](../../../../docs/architecture/IMPLEMENTATION_NOTES.md#idempotency-key-post-v1events-landed-2026-08-10) for how the two relate.
+
 ## Status transitions (CURRENT, landed 2026-08-09)
 
 `updateStatus()` validates against `ALLOWED_TRANSITIONS`, a state machine derived from `docs/product/VISION.md`'s Event Lifecycle:
