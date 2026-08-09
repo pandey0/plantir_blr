@@ -10,6 +10,9 @@ export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   JWT_SECRET: z.string().min(1).optional(),
   CORS_ORIGINS: z.string().optional(),
+  // plantir-blr-data-service (sibling repo, FastAPI) — transit arrivals/fare estimates.
+  // Defaults to local dev; no production default because there's no deployed instance yet.
+  DATA_SERVICE_URL: z.string().url().optional(),
 });
 
 export interface Config {
@@ -17,6 +20,7 @@ export interface Config {
   isProduction: boolean;
   jwtSecret: string | undefined;
   corsOrigins: string[];
+  dataServiceUrl: string;
 }
 
 export type ConfigResult = { success: true; config: Config } | { success: false; error: string };
@@ -44,6 +48,7 @@ export function buildConfig(env: NodeJS.ProcessEnv): ConfigResult {
       corsOrigins: (parsed.data.CORS_ORIGINS ?? 'http://localhost:3000,http://localhost:3002,http://localhost:3003')
         .split(',')
         .map((origin) => origin.trim()),
+      dataServiceUrl: parsed.data.DATA_SERVICE_URL ?? 'http://localhost:8000',
     },
   };
 }

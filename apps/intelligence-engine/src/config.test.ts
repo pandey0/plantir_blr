@@ -53,4 +53,25 @@ describe('buildConfig', () => {
       expect(result.config.corsOrigins).toEqual(['http://a.com', 'http://b.com', 'http://c.com']);
     }
   });
+
+  it('defaults DATA_SERVICE_URL to localhost:8000', () => {
+    const result = buildConfig({});
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.config.dataServiceUrl).toBe('http://localhost:8000');
+    }
+  });
+
+  it('respects an explicit DATA_SERVICE_URL', () => {
+    const result = buildConfig({ DATA_SERVICE_URL: 'http://data-service.internal:8000' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.config.dataServiceUrl).toBe('http://data-service.internal:8000');
+    }
+  });
+
+  it('rejects a malformed DATA_SERVICE_URL', () => {
+    const result = buildConfig({ DATA_SERVICE_URL: 'not-a-url' });
+    expect(result.success).toBe(false);
+  });
 });

@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ChevronLeft, ChevronRight, Train, Bus, ArrowUpDown, Clock, Wallet, MousePointerClick } from 'lucide-react';
 import { LayerNode } from '@/lib/layers';
+import { getFareEstimate } from '@/lib/api';
 
 interface CommuteDrawerProps {
   layers: LayerNode[];
@@ -265,7 +266,11 @@ interface GenericTab {
   layerIds: string[];
   stops: string[];
   stopLabel: string;
-  apiMode: string;
+  // The engine's TransitMode contract only has METRO/BUS (proto/plantir/transit/v1/arrival.proto)
+  // — this used to be 'RAIL'/'BMTC'/'KSRTC' below, none of which the engine has ever accepted
+  // (always 400 VALIDATION_ERROR, silently swallowed by handleScan's catch → "—"/"—" fallback,
+  // so the UI "worked" but never actually got real data). Mapped to the closest valid bucket.
+  apiMode: 'METRO' | 'BUS';
 }
 
 const OTHER_TABS: GenericTab[] = [
@@ -279,7 +284,7 @@ const OTHER_TABS: GenericTab[] = [
     layerIds: ['ir_stations'],
     stops: ['KSR City (Majestic)', 'Yeshvantpur Jn', 'KR Puram', 'Cantonment', 'Whitefield', 'Banaswadi', 'Hebbal', 'Carmelaram', 'Nayandahalli', 'Krishnarajapuram'],
     stopLabel: 'Station',
-    apiMode: 'RAIL',
+    apiMode: 'BUS',
   },
   {
     id: 'bmtc',
@@ -291,7 +296,7 @@ const OTHER_TABS: GenericTab[] = [
     layerIds: ['bmtc_depots'],
     stops: ['Majestic', 'KR Market', 'Shivajinagar', 'Koramangala', 'BTM Layout', 'Jayanagar', 'Banashankari', 'Rajajinagar', 'Yeshvantpur', 'Hebbal', 'Whitefield', 'Electronic City', 'Marathahalli', 'Sarjapur Road'],
     stopLabel: 'Stop',
-    apiMode: 'BMTC',
+    apiMode: 'BUS',
   },
   {
     id: 'ksrtc',
@@ -303,7 +308,7 @@ const OTHER_TABS: GenericTab[] = [
     layerIds: ['ksrtc_terminals'],
     stops: ['Kempegowda BS (Majestic)', 'Satellite BS (Vijayanagar)', 'Shivajinagar BS', 'Mysuru', 'Mangaluru', 'Hubballi', 'Hassan', 'Tumakuru', 'Chikkaballapur', 'Kolar'],
     stopLabel: 'Terminal',
-    apiMode: 'KSRTC',
+    apiMode: 'BUS',
   },
 ];
 
@@ -317,9 +322,8 @@ function GenericRoutePlanner({ tab }: { tab: GenericTab }) {
     setScanning(true);
     setResult(null);
     try {
-      const res = await fetch(`http://localhost:3001/transit/estimate?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&mode=${tab.apiMode}`);
-      if (res.ok) setResult(await res.json());
-      else throw new Error();
+      const estimate = await getFareEstimate(from, to, tab.apiMode);
+      setResult({ fare: String(estimate.fare), time: estimate.time });
     } catch {
       setResult({ fare: '—', time: '—' });
     } finally {

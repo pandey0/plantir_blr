@@ -17,7 +17,7 @@ Fastify 5 + TypeScript (ESM) backend. `app.ts` builds the configured Fastify ins
 | `ws/` | WebSocket connection hub + `broadcast()` | [`ws/README.md`](ws/README.md) |
 | `events/` | `createEvent()` (incl. duplicate/corroboration detection), `updateStatus()`, `recalculateConfidence()` (multi-signal v2, the only code that writes to `Event`), `listEventsInRange()` (playback), `geo-query.ts`'s bbox/radius/ward/cluster/heatmap read queries, `list-cache.ts`'s request-coalescing cache, `idempotency.ts`'s `Idempotency-Key` dedup store, `prisma-enum.ts`'s Prisma⟷api-contracts boundary conversion | [`events/README.md`](events/README.md) |
 | `ingestion/` | `Source` adapters, `ingestEvent()` — normalizes raw input before calling `events.createEvent()` | [`ingestion/README.md`](ingestion/README.md) |
-| `transit.ts` | Transit-arrival and fare-estimate logic (fully mocked) | [`transit/README.md`](transit/README.md) |
+| `transit.ts` | Thin HTTP client to `plantir-blr-data-service` (sibling repo) for transit-arrival and fare-estimate data — no longer generates mock data itself (moved 2026-08-10) | [`transit/README.md`](transit/README.md) |
 | `wards/` | Bangalore BBMP ward polygon lookup (static GeoJSON, loaded in memory) — backs `GET /v1/events?wardId=` | [`wards/README.md`](wards/README.md) |
 
 `routes/` (below) is the one piece of the originally-planned split that hasn't landed — route *registration* is still inline in `index.ts`, only the logic inside each handler has been extracted.

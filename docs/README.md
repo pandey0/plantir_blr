@@ -27,6 +27,8 @@ This is the entry point. Read this file first, then only the specific doc(s) bel
 | [`api/README.md`](api/README.md) | Index of per-app API docs (each independent app that exposes an API gets its own file under `api/`) | API index |
 | [`api/intelligence-engine.md`](api/intelligence-engine.md) | Every HTTP/WS endpoint intelligence-engine exposes: method, path, auth, request/response shape | API |
 | [`../apps/intelligence-engine/src/README.md`](../apps/intelligence-engine/src/README.md) | intelligence-engine's internal file layout, current vs. planned module split | Component |
+| [`../apps/public-map/README.md`](../apps/public-map/README.md) | public-map's internal file layout | Component |
+| [`architecture/PUBLIC_MAP_STANDARDS_COMPLIANCE.md`](architecture/PUBLIC_MAP_STANDARDS_COMPLIANCE.md) | Section-by-section audit of `public-map` against `standards/frontend-engineering-standards.md` | System / rules |
 | [`../packages/api-contracts/README.md`](../packages/api-contracts/README.md) | Generated proto types + Zod schemas shared across apps — what's generated, why it's not wired into current routes yet | Component |
 | [`TACTICAL_SCHEMA.md`](TACTICAL_SCHEMA.md) | Map visual design tokens (colors, typography) | Component (public-map) |
 | [`product/VISION.md`](product/VISION.md) | Product/UX vision — mostly `PLANNED`, not an implementation spec | Product |

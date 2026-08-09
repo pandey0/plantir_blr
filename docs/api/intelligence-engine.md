@@ -4,7 +4,7 @@
 >
 > **Status**: hand-maintained (CURRENT), and deliberately staying that way — `npm run docs:api:check` (`apps/intelligence-engine/scripts/check-api-docs.ts`, wired into pre-commit) verifies every route in `routes/manifest.ts` has a heading here, but does not generate or overwrite this file's content. See [`../architecture/TECH_STACK.md`](../architecture/TECH_STACK.md) decision log for why the original full-regeneration plan was dropped.
 
-Base URL: `http://localhost:3001`. **All routes moved to `/v1/` 2026-08-09** (except `/health` and `/dev/*` — see "Versioning" below) — **no backward-compat aliases for the old unversioned paths (`/report`, `/events`, etc.) exist**. This was a deliberate choice, not an oversight: see [`../architecture/IMPLEMENTATION_NOTES.md`](../architecture/IMPLEMENTATION_NOTES.md#versioning). `public-map` still calls the old paths and will 404 until it's updated on its own turn.
+Base URL: `http://localhost:3001`. **All routes moved to `/v1/` 2026-08-09** (except `/health` and `/dev/*` — see "Versioning" below) — **no backward-compat aliases for the old unversioned paths (`/report`, `/events`, etc.) exist**. This was a deliberate choice, not an oversight: see [`../architecture/IMPLEMENTATION_NOTES.md`](../architecture/IMPLEMENTATION_NOTES.md#versioning). `public-map` was adapted to call the `/v1/` paths 2026-08-10 (previously stale).
 
 ## Versioning
 
@@ -87,10 +87,10 @@ Not under `/v1`. Body: `{ role: 'citizen' | 'authority' }`. Returns `{ token }`,
 Not under `/v1`. No body, no auth. Generates a random category/location/coordinates within Bangalore's bounding box, creates an event with persisted `geom`, broadcasts it.
 
 ### `GET /v1/transit/arrivals?station=&mode=METRO|BUS`
-Public, no auth. Now Zod-validated (`getArrivalsRequestSchema`, was manual `if` checks before 2026-08-09). Returns `ArrivalData[]`. **Fully mocked** — random ETAs, not a real transit feed. See [`../../apps/intelligence-engine/src/transit/README.md`](../../apps/intelligence-engine/src/transit/README.md).
+Public, no auth. Zod-validated (`getArrivalsRequestSchema`). Returns `ArrivalData[]`. **Proxied to `plantir-blr-data-service`** (sibling repo, landed 2026-08-10 — see [`../../apps/intelligence-engine/src/transit/README.md`](../../apps/intelligence-engine/src/transit/README.md)), still fully mocked underneath (that service's `MockTransitProvider`), not a real transit feed yet. If that service is unreachable, this returns 500, not silently empty data.
 
 ### `GET /v1/transit/estimate?from=&to=&mode=METRO|BUS`
-Public, no auth. Now Zod-validated. Returns `{ fare: number, time: string }`. `fare` is random; `time` is a hardcoded string (`'28 mins'`) regardless of input. Mocked, same caveat as above.
+Public, no auth. Zod-validated. Returns `{ fare: number, time: string }` — both values now come from `plantir-blr-data-service` (`time` used to be a hardcoded `'28 mins'` regardless of input; that's gone now that the actual estimate provides it). Same proxy/mocked caveat as arrivals above.
 
 ## CORS
 

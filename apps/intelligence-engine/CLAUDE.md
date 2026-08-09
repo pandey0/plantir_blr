@@ -32,5 +32,6 @@ Validated at startup by `config.ts` (Zod), not read ad hoc from `process.env` in
 - `NODE_ENV` — `development | production | test`, defaults to `development`.
 - `JWT_SECRET` — required in production (process exits at startup if missing); falls back to a logged insecure dev default otherwise.
 - `CORS_ORIGINS` — comma-separated allowlist, defaults to the three local frontend ports (3000, 3002, 3003).
+- `DATA_SERVICE_URL` — base URL for `plantir-blr-data-service` (sibling repo, transit data), must be a valid URL if set, defaults to `http://localhost:8000`. See `src/transit/README.md`.
 
 **Not validated here**: `DATABASE_URL`. Prisma's generated client loads it itself from `packages/database/.env` via a path baked in at `prisma generate` time — it's never in `process.env` populated ahead of time by anything else. See [`../../docs/architecture/IMPLEMENTATION_NOTES.md`](../../docs/architecture/IMPLEMENTATION_NOTES.md).

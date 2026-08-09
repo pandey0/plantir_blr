@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { LayerNode } from '@/lib/layers';
 import { LayerTree } from './LayerTree';
 import { Button } from './ui/button';
+import { getFareEstimate } from '@/lib/api';
 import { 
   Train, 
   Bus, 
@@ -34,11 +35,9 @@ export function Sidebar({ layers, onToggleLayer, events, visuals, onVisualChange
   const handleCheckStatus = async () => {
     setIsSearching(true);
     try {
-      const [arrRes, estRes] = await Promise.all([
-        fetch(`http://localhost:3001/transit/arrivals?station=${selectedFrom}&mode=${transitMode}`),
-        fetch(`http://localhost:3001/transit/estimate?from=${selectedFrom}&to=${selectedTo}&mode=${transitMode}`)
-      ]);
-      setEstimate(await estRes.json());
+      // Only the fare/time estimate is actually rendered below — the original code also
+      // fetched arrivals here and discarded the result, doing real work for nothing.
+      setEstimate(await getFareEstimate(selectedFrom, selectedTo, transitMode));
     } catch (err) {
       console.error(err);
     } finally {

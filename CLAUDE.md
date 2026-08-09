@@ -64,12 +64,12 @@ Before editing code, check whether a doc already covers it — this repo is bein
 npm workspaces monorepo. Four apps, one shared package:
 
 - **`apps/intelligence-engine`** — Fastify 5 + TypeScript backend. ESM module (`"type": "module"`). Uses `ts-node/esm` loader via nodemon in dev. Exposes REST endpoints + a WebSocket hub at `/ws` that broadcasts `NEW_EVENT` messages to connected map clients. Runs on port 3001.
-- **`apps/public-map`** — Next.js 14 (App Router). The main UI. Leaflet map with drill-down administrative hierarchy (CITY → CORP → WARD → BLOCK). Connects to the engine's WebSocket for live event streaming.
+- **`apps/public-map`** — Next.js 14 (App Router). The main UI. Leaflet map with drill-down administrative hierarchy (CITY → CORP → WARD → BLOCK). Connects to the engine over HTTP (`lib/api.ts`, all `/v1/` — adapted 2026-08-10) and WebSocket for live event streaming. See [`apps/public-map/CLAUDE.md`](apps/public-map/CLAUDE.md).
 - **`apps/citizen-app`** — Vite + React stub, not yet implemented.
 - **`apps/authority-portal`** — Vite + React stub, not yet implemented.
 - **`packages/database`** — Prisma schema + migrations. `DATABASE_URL` in `packages/database/.env` points to port 5433.
 
-Intelligence Engine routes, registered from `apps/intelligence-engine/src/routes/manifest.ts` by `app.ts`'s `buildApp()`: `GET /ws` (WebSocket upgrade, unversioned), `GET /v1/events` (`bbox=`/`lat=&lng=&radiusKm=`/`wardId=` filters, mutually exclusive), `GET /v1/events/clusters`, `GET /v1/events/heatmap`, `GET /v1/events/playback`, `PATCH /v1/events/:id/status`, `POST /v1/events`, `GET /v1/transit/arrivals`, `GET /v1/transit/estimate` (transit logic lives in `src/transit.ts`), plus non-production-only `POST /dev/token`/`POST /dev/inject`. **All moved to `/v1/` 2026-08-09, no backward-compat aliases** — `public-map` still calls the old unversioned paths and is stale until updated on its own turn; see [`docs/architecture/IMPLEMENTATION_NOTES.md`](docs/architecture/IMPLEMENTATION_NOTES.md#versioning).
+Intelligence Engine routes, registered from `apps/intelligence-engine/src/routes/manifest.ts` by `app.ts`'s `buildApp()`: `GET /ws` (WebSocket upgrade, unversioned), `GET /v1/events` (`bbox=`/`lat=&lng=&radiusKm=`/`wardId=` filters, mutually exclusive), `GET /v1/events/clusters`, `GET /v1/events/heatmap`, `GET /v1/events/playback`, `PATCH /v1/events/:id/status`, `POST /v1/events`, `GET /v1/transit/arrivals`, `GET /v1/transit/estimate` (transit logic lives in `src/transit.ts`), plus non-production-only `POST /dev/token`/`POST /dev/inject`. **All moved to `/v1/` 2026-08-09, no backward-compat aliases** — see [`docs/architecture/IMPLEMENTATION_NOTES.md`](docs/architecture/IMPLEMENTATION_NOTES.md#versioning). `public-map` was adapted to call these `/v1/` paths 2026-08-10 (previously stale — see `TECH_STACK.md`'s decision log); `citizen-app`/`authority-portal` remain unbuilt stubs.
 
 ## Key implementation details
 

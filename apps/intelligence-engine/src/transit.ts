@@ -1,7 +1,17 @@
+import axios from 'axios';
 import { TransitMode } from '@plantir/api-contracts';
+import { config } from './config.js';
 
 // Intelligence Engine - Transit Adapter
-// Purpose: Fetch or simulate high-fidelity live transit data for Bangalore
+//
+// Landed 2026-08-10: this used to contain the mock arrival/fare logic directly
+// (Math.random()-based). That logic has moved to a sibling repo,
+// plantir-blr-data-service (FastAPI), behind a provider interface designed so a real
+// upstream (BMTC/BMRCL feeds, a government API) can be plugged in there later with zero
+// changes here or anywhere downstream (public-map) — see that repo's README.md for the
+// provider pattern. This file is now a thin HTTP client, not where transit logic lives.
+//
+// DATA_SERVICE_URL (config.ts) points at it, defaulting to http://localhost:8000.
 
 export interface ArrivalData {
   id: string;
@@ -12,69 +22,26 @@ export interface ArrivalData {
   platform?: string;
 }
 
-// No try/catch here — this function is pure computation (Math.random() + string templating),
-// nothing in it can throw. A try/catch that can never trigger is dead code that also masks a
-// real future bug (see docs/standards/software-engineering-practices-standards.md's "don't
-// catch what can't happen" guidance) — found during a secrets-in-logs audit, see
-// docs/architecture/IMPLEMENTATION_NOTES.md. When this is wired to a real transit API (axios
-// call), error handling belongs back here, scoped to the actual I/O call that can fail.
-export async function fetchLiveArrivals(station: string, mode: TransitMode): Promise<ArrivalData[]> {
-  // Note: In a production environment, we would use the IUDX or Namma Yatri API keys here.
-  // For this build, we use the public inquiry pattern.
-
-  if (mode === 'METRO') {
-    // Simulate real-time fetch from BMRCL/Namma Yatri
-    // Actual live logic would involve: axios.get(`https://api.nammayatri.in/metro/arrivals/${station}`)
-
-    const minutes = [Math.floor(Math.random() * 5) + 1, Math.floor(Math.random() * 10) + 6];
-
-    return [
-      {
-        id: `M-${station}-1`,
-        route: 'Purple Line',
-        direction: 'Towards Whitefield (Kadugodi)',
-        eta: `${minutes[0]} mins`,
-        status: minutes[0] < 3 ? 'APPROACHING' : 'ON_TIME',
-        platform: 'Platform 2'
-      },
-      {
-        id: `M-${station}-2`,
-        route: 'Purple Line',
-        direction: 'Towards Challaghatta',
-        eta: `${minutes[1]} mins`,
-        status: 'ON_TIME',
-        platform: 'Platform 1'
-      }
-    ];
-  } else {
-    // BMTC Live tracking (from IUDX/Unofficial feed)
-    const minutes = [Math.floor(Math.random() * 15) + 2, Math.floor(Math.random() * 25) + 10];
-
-    return [
-      {
-        id: `B-${station}-1`,
-        route: 'KIA-9',
-        direction: 'Kempegowda Intl Airport',
-        eta: `${minutes[0]} mins`,
-        status: minutes[0] > 10 ? 'DELAYED' : 'APPROACHING'
-      },
-      {
-        id: `B-${station}-2`,
-        route: '500-D',
-        direction: 'Hebbal Central',
-        eta: `${minutes[1]} mins`,
-        status: 'ON_TIME'
-      }
-    ];
-  }
+export interface FareEstimate {
+  fare: number;
+  time: string;
 }
 
-// Logic to calculate dynamic fare based on Bangalore tiers
-export function calculateFare(from: string, to: string, mode: TransitMode): number {
-  // Simplistic distance-based logic for Bangalore
-  // Majestic to Indiranagar ~ 10km -> ₹30
-  // Majestic to Whitefield ~ 20km -> ₹45
-  const base = mode === 'METRO' ? 10 : 5;
-  const multiplier = Math.random() * 30 + 15; 
-  return Math.floor(base + multiplier);
+// 5s timeout on every outbound call — this is the engine's first real outbound HTTP
+// dependency (everything before this was either DB or fully mocked in-process), so this
+// is also the first place docs/standards/http-networking-engineering-standards.md's
+// "every outbound call needs a timeout" requirement actually applies. No retry: a failed
+// request throws and the route handler's normal error path (global setErrorHandler, 500)
+// takes it from there — no silent fallback to fake data, an unreachable dependency should
+// be visible, not masked.
+const client = axios.create({ baseURL: config.dataServiceUrl, timeout: 5000 });
+
+export async function fetchLiveArrivals(station: string, mode: TransitMode): Promise<ArrivalData[]> {
+  const res = await client.get<ArrivalData[]>('/transit/arrivals', { params: { station, mode } });
+  return res.data;
+}
+
+export async function getFareEstimate(from: string, to: string, mode: TransitMode): Promise<FareEstimate> {
+  const res = await client.get<FareEstimate>('/transit/estimate', { params: { from, to, mode } });
+  return res.data;
 }

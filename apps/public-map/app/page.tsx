@@ -13,12 +13,13 @@ import { BANGALORE_HIERARCHY } from '@/lib/hierarchy'
 import { HierarchyType } from '@/lib/geo-utils'
 import { MapActions } from '@/components/Map/MapInner'
 import { DisplayControl } from '@/components/DisplayControl'
+import { listEvents, getWsUrl, type MapEvent } from '@/lib/api'
 
 export default function Home() {
   const [mounted, setMounted] = useState(false)
   const [domains, setDomains] = useState<DomainNode[]>(DOMAIN_REGISTRY)
   const [baseLayers, setBaseLayers] = useState<LayerNode[]>(LAYER_REGISTRY)
-  const [events, setEvents] = useState<any[]>([])
+  const [events, setEvents] = useState<MapEvent[]>([])
   const [visuals, setVisuals] = useState<VisualState>(DEFAULT_VISUAL)
   const [wsConnected, setWsConnected] = useState(false)
 
@@ -34,9 +35,34 @@ export default function Home() {
 
   const mapActionsRef = useRef<MapActions | null>(null)
 
+  // Random constituency enrichment — the engine has no ward/constituency data on an Event (see
+  // apps/intelligence-engine/src/wards/README.md: wardId is a read-side FILTER, never written
+  // back onto the event), so this is a deliberate placeholder to let corp-zone filtering
+  // (activeCorpId) work against something until that's wired up for real. Pre-existing
+  // behavior, applied consistently to both WS-pushed and GET-hydrated events below — not
+  // something this change introduces or fixes.
+  function randomConstituency(): string {
+    const constituencies = BANGALORE_HIERARCHY.flatMap(c => c.constituencies)
+    return constituencies[Math.floor(Math.random() * constituencies.length)]
+  }
+
   useEffect(() => {
     setMounted(true)
-    const socket = new WebSocket('ws://localhost:3001/ws')
+
+    // Initial hydration — previously this app only ever learned about events via WS NEW_EVENT
+    // pushes, so a page refresh showed zero events until new ones streamed in. See
+    // docs/architecture/IMPLEMENTATION_NOTES.md's "Coordinates missing from read responses"
+    // note for the engine-side fix (attachCoordinates()) this depends on.
+    listEvents({ limit: 20 })
+      .then(({ events: hydrated }) => {
+        setEvents(hydrated.map(e => ({ ...e, constituency: randomConstituency() })))
+      })
+      .catch(() => {
+        // Engine unreachable on load — non-fatal, WS will populate events as they arrive live,
+        // same degraded-but-usable behavior this app already had before hydration existed.
+      })
+
+    const socket = new WebSocket(getWsUrl())
     socket.onopen = () => setWsConnected(true)
     socket.onclose = () => setWsConnected(false)
     socket.onerror = () => setWsConnected(false)
@@ -44,10 +70,17 @@ export default function Home() {
       try {
         const data = JSON.parse(msg.data)
         if (data.type === 'NEW_EVENT') {
-          const constituencies = BANGALORE_HIERARCHY.flatMap(c => c.constituencies)
-          const randomConst = constituencies[Math.floor(Math.random() * constituencies.length)]
-          const enriched = { ...data.payload, constituency: data.payload.constituency || randomConst }
+          const enriched = { ...data.payload, constituency: data.payload.constituency || randomConstituency() }
           setEvents(prev => [enriched, ...prev].slice(0, 20))
+        } else if (data.type === 'EVENT_UPDATED') {
+          // Status/confidence change, or a duplicate-detection merge on an existing event (see
+          // docs/api/intelligence-engine.md's GET /ws section) — payload has no lat/lng/category,
+          // so this can only ever update an event already in state, never add a new marker.
+          setEvents(prev => prev.map(e =>
+            e.id === data.payload.id
+              ? { ...e, status: data.payload.status, confidence_score: data.payload.confidence_score ?? e.confidence_score }
+              : e
+          ))
         }
       } catch (e) {}
     }
@@ -79,7 +112,7 @@ export default function Home() {
     let result = events
     if (activeCorpId) {
       const corp = BANGALORE_HIERARCHY.find(c => c.id === activeCorpId)
-      if (corp) result = result.filter(e => corp.constituencies.includes(e.constituency))
+      if (corp) result = result.filter(e => !!e.constituency && corp.constituencies.includes(e.constituency))
     }
     if (categoryFilter !== 'ALL') {
       result = result.filter(e => e.type === categoryFilter)

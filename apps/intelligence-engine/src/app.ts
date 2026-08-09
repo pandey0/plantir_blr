@@ -16,7 +16,7 @@ import {
   getHeatmapRequestSchema,
   getPlaybackRequestSchema,
 } from '@plantir/api-contracts';
-import { fetchLiveArrivals, calculateFare } from './transit.js';
+import { fetchLiveArrivals, getFareEstimate } from './transit.js';
 import { registerWsHub } from './ws/index.js';
 import {
   createEvent,
@@ -228,8 +228,7 @@ export function buildApp(): FastifyInstance {
     GetFareEstimate: async (request, reply) => {
       const parsed = getFareEstimateRequestSchema.safeParse(request.query);
       if (!parsed.success) return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid query parameters', parsed.error.flatten());
-      const fare = calculateFare(parsed.data.from, parsed.data.to, parsed.data.mode);
-      return { fare, time: '28 mins' };
+      return getFareEstimate(parsed.data.from, parsed.data.to, parsed.data.mode);
     },
 
     DevIssueToken: async (request, reply) => {

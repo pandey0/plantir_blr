@@ -9,6 +9,7 @@ import { hierarchyService, HierarchyLevel, HierarchyType } from '@/lib/geo-utils
 import { fetchOverpassLayer, OSMFeature } from '@/lib/overpass'
 import { BANGALORE_HIERARCHY } from '@/lib/hierarchy'
 import { getCategoryColor } from '@/lib/categories'
+import { getArrivals } from '@/lib/api'
 import { Loader2 } from 'lucide-react'
 import * as turf from '@turf/turf'
 
@@ -429,10 +430,7 @@ export default function MapInner({
                 // Stop click from reaching the polygon/ward layer underneath
                 L.DomEvent.stopPropagation(e);
                 try {
-                  const res = await fetch(
-                    `http://localhost:3001/transit/arrivals?station=${encodeURIComponent(p.name)}&mode=METRO`
-                  );
-                  const arrivals = res.ok ? await res.json() : [];
+                  const arrivals = await getArrivals(p.name, 'METRO');
                   (layer as any).setPopupContent(buildStationPopupHTML(p.name, lineLabel, lineColor, arrivals));
                 } catch {
                   (layer as any).setPopupContent(buildStationPopupHTML(p.name, lineLabel, lineColor, []));
