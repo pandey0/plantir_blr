@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package plantir.events.v1;
+
+import "plantir/events/v1/create_event.proto";
+import "plantir/events/v1/list_events.proto";
+import "plantir/events/v1/update_event_status.proto";
+
+// EventsService — city-issue events (potholes, garbage, water logging, etc).
+//
+// REST mapping is NOT driven by these RPC definitions (no sebuf/google.api.http
+// annotations — see docs/architecture/TECH_STACK.md decision log for why). The
+// authoritative method/path/auth mapping lives in
+// apps/intelligence-engine/src/routes/manifest.ts. RPC comments below mirror it
+// for readability only; if they ever disagree, manifest.ts wins.
+service EventsService {
+  // POST /report  (auth: citizen or authority)
+  rpc CreateEvent(CreateEventRequest) returns (CreateEventResponse);
+
+  // GET /events  (auth: none)
+  rpc ListEvents(ListEventsRequest) returns (ListEventsResponse);
+
+  // PATCH /events/{id}/status  (auth: authority)
+  rpc UpdateEventStatus(UpdateEventStatusRequest) returns (UpdateEventStatusResponse);
+}

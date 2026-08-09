@@ -8,7 +8,8 @@
     "infra:down": "docker-compose down",
     "dev:engine": "npm run dev --workspace=apps/intelligence-engine",
     "dev:map": "npm run dev --workspace=apps/public-map",
-    "db:migrate": "npm run migrate --workspace=packages/database"
+    "db:migrate": "npm run migrate --workspace=packages/database",
+    "proto:generate": "cd proto && buf generate"
   },
   "keywords": [],
   "author": "",
@@ -17,5 +18,9 @@
   "workspaces": [
     "apps/*",
     "packages/*"
-  ]
+  ],
+  "devDependencies": {
+    "@bufbuild/buf": "^1.72.0",
+    "ts-proto": "^2.12.0"
+  }
 }

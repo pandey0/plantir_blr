@@ -1,4 +1,12 @@
-# Bangalore City Intelligence Platform — System Design Summary
+# Product Vision — Bangalore City Intelligence Platform
+
+> Moved here from root `blr_palantir.md` during doc reorganization (was untracked from the rest of the doc tree). Status labels per [`../README.md`](../README.md).
+>
+> **This is a product/UX vision document, not an implementation spec.** Almost everything described below is `PLANNED` — cross-check against [`../architecture/DATA_FLOW.md`](../architecture/DATA_FLOW.md) and [`../api/intelligence-engine.md`](../api/intelligence-engine.md) for what's actually built before assuming a feature exists.
+>
+> **Ownership rule**: if a feature described here gets built, don't just leave it here as "vision" — add/update the relevant implementation doc (module `README.md`, `api/*.md`, or `DATA_FLOW.md`) and note here that it's shipped.
+>
+> **Known divergence to reconcile before implementing confidence scoring**: this doc describes a 0–100 *bucketed* confidence scale (Low/Moderate/High/Critical below) with reporter/evidence/spatial/temporal/authority signals. [`../../apps/intelligence-engine/src/events/README.md`](../../apps/intelligence-engine/src/events/README.md) and root `CLAUDE.md` describe a simpler *additive* formula (+20/unique reporter, +30/media, −50/fraud-flag) with no spatial/temporal signals. These are not yet reconciled — do not implement confidence scoring against either doc without resolving this first (a `PROPOSED` entry in [`../architecture/TECH_STACK.md`](../architecture/TECH_STACK.md) if the resolution changes the already-logged formula).
 
 ## Overview
 
@@ -588,7 +596,12 @@ pollution sensors
 crowd density signals
 ```
 
-These automated signals would combine with citizen reports to create a **comprehensive city intelligence system**.
+These automated signals would combine with citizen reports to create a **comprehensive city intelligence system**. Each would be a new `Source` adapter under [`../../apps/intelligence-engine/src/ingestion/README.md`](../../apps/intelligence-engine/src/ingestion/README.md) once a concrete integration is chosen — not built speculatively ahead of that.
+
+Bangalore-specific context (folded in from the retired `PROJECT_PLAN.md`):
+
+* **Ward integration**: map event coordinates to Bangalore's 243 BBMP wards using GeoJSON polygons (`public-map` already loads `bbmp-wards.json` — see root `CLAUDE.md`'s Map layer system section for the current drill-down hierarchy this would extend).
+* **Traffic correlation** (future, unscoped): overlay traffic data (Google Maps Traffic / TomTom) to show how road issues impact congestion. Not designed — do not build ahead of a concrete data source being identified.
 
 ---
 
@@ -604,4 +617,3 @@ Event Intelligence Engine
 ```
 
 Together they form a **real-time digital observatory for Bangalore**.
-

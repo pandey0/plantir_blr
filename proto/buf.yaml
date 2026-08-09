@@ -1,0 +1,5 @@
+version: v2
+
+# No lint/breaking-change enforcement yet — deliberately deferred (see
+# docs/architecture/TECH_STACK.md decision log). Add a `lint:`/`breaking:` block
+# once there's a CI pipeline to run it in; an unenforced rule is worse than none.

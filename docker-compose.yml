@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: plantir_secret_password
       POSTGRES_DB: plantir_blr_db
     ports:
-      - "5433:5433"
+      - "5433:5432"
     volumes:
       - postgis_data:/var/lib/postgresql/data
     healthcheck:

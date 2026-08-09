@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package plantir.transit.v1;
+
+import "plantir/transit/v1/arrival.proto";
+
+message GetArrivalsRequest {
+  string station = 1;
+  TransitMode mode = 2;
+}
+
+message GetArrivalsResponse {
+  repeated Arrival arrivals = 1;
+}

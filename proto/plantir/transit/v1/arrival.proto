@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package plantir.transit.v1;
+
+// See event.proto's comment on why enum values match plain REST/TS strings
+// instead of proto3's UNSPECIFIED-first convention.
+
+enum TransitMode {
+  METRO = 0;
+  BUS = 1;
+}
+
+enum ArrivalStatus {
+  ON_TIME = 0;
+  DELAYED = 1;
+  APPROACHING = 2;
+}
+
+message Arrival {
+  string id = 1;
+  string route = 2;
+  string direction = 3;
+  string eta = 4;
+  ArrivalStatus status = 5;
+  optional string platform = 6;
+}

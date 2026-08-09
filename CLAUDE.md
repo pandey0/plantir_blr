@@ -18,9 +18,22 @@ npm run dev:map           # Public Map — Next.js dev server
 
 # Build
 npm run build --workspace=apps/intelligence-engine
+
+# Lint (public-map only; other apps have no lint script)
+npm run lint --workspace=apps/public-map
 ```
 
 No test suite is configured.
+
+## Documentation
+
+Before editing code, check whether a doc already covers it — this repo is being deliberately over-documented so an agent can work from docs instead of re-deriving design by reading the whole tree. Start at [`docs/README.md`](docs/README.md) (the index). Root `docs/` holds only cross-app material (system topology, cross-app data flow, per-app API index); each app's internal module docs live inside that app's own folder (e.g. `apps/intelligence-engine/src/*/README.md`).
+
+**Ownership rule, binding on every change**: if you touch code a doc describes, update that doc in the same change — not a follow-up. Docs are labeled CURRENT / PLANNED / STALE-KNOWN-WRONG / PROPOSED so neither you nor a future agent has to guess what's actually built.
+
+**[`docs/architecture/TECH_STACK.md`](docs/architecture/TECH_STACK.md) is binding**: it lists the stack per app and a decision log. Major changes (new datastore/infra, framework swap, splitting a module into its own service, auth architecture changes, anything that reverses a logged decision) must be confirmed with the user before implementation — write it up there as `PROPOSED` and ask, don't just build it.
+
+**Rules exist at two levels, don't duplicate across them**: this file (repo root) holds rules that apply everywhere — doc ownership, the change-confirmation policy, monorepo commands. Each app that has app-specific conventions (import style, validation patterns, auth wiring, etc.) gets its own `apps/<app>/CLAUDE.md`, loaded automatically by Claude Code when working in that subtree — see `apps/intelligence-engine/CLAUDE.md` for the first one. When a rule is specific to one app's code, it belongs in that app's `CLAUDE.md`, not here.
 
 ## Architecture
 
@@ -32,9 +45,13 @@ npm workspaces monorepo. Four apps, one shared package:
 - **`apps/authority-portal`** — Vite + React stub, not yet implemented.
 - **`packages/database`** — Prisma schema + migrations. `DATABASE_URL` in `packages/database/.env` points to port 5433.
 
+Intelligence Engine routes (`apps/intelligence-engine/src/index.ts`): `GET /ws` (WebSocket upgrade), `GET /events`, `PATCH /events/:id/status`, `POST /report`, `POST /dev/inject`, `GET /transit/arrivals`, `GET /transit/estimate` (transit logic lives in `src/transit.ts`).
+
 ## Key implementation details
 
-**Database:** PostGIS runs on port **5433** (not default 5432). The `geom` GEOGRAPHY(POINT) column on the `Event` table is managed via raw SQL migration (`packages/database/prisma/migrations/20260318120343_init/migration.sql`), not the Prisma schema, because Prisma has limited built-in PostGIS support.
+**Database:** PostGIS runs on host port **5433**, mapped to the container's default **5432** (`docker-compose.yml`). The `geom GEOGRAPHY(POINT)` column on `Event` is added via migration `20260809130000_add_event_geom` and written via `prisma.$executeRaw` in `events.createEvent()` (`apps/intelligence-engine/src/events/index.ts`) — not via `schema.prisma` (Prisma has limited built-in PostGIS support). Applied and verified end-to-end against a live database. See [`docs/api/intelligence-engine.md`](docs/api/intelligence-engine.md) and [`apps/intelligence-engine/src/events/README.md`](apps/intelligence-engine/src/events/README.md).
+
+**Auth:** JWT bearer tokens (`@fastify/jwt`), role claim `citizen`/`authority`, required on `POST /report` and `PATCH /events/:id/status`. No real login flow exists — `POST /dev/token` (non-production only) mints test tokens. See [`docs/api/intelligence-engine.md`](docs/api/intelligence-engine.md).
 
 **Intelligence Engine ESM:** All internal imports must use `.js` extensions (e.g., `import { foo } from './transit.js'`). This is required for Node ESM compatibility even when writing TypeScript.
 

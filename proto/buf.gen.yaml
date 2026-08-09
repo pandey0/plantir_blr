@@ -1,0 +1,12 @@
+version: v2
+
+plugins:
+  - local: protoc-gen-ts_proto
+    out: ../packages/api-contracts/src/generated
+    opt:
+      - esModuleInterop=true
+      - outputServices=false
+      - stringEnums=true
+      - useOptionals=messages
+      - env=node
+      - importSuffix=.js

@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package plantir.transit.v1;
+
+import "plantir/transit/v1/get_arrivals.proto";
+import "plantir/transit/v1/get_fare_estimate.proto";
+
+// TransitService — currently fully mocked data (random ETAs/fares), see
+// apps/intelligence-engine/src/transit/README.md. REST mapping lives in
+// apps/intelligence-engine/src/routes/manifest.ts, not these RPC comments.
+service TransitService {
+  // GET /transit/arrivals  (auth: none)
+  rpc GetArrivals(GetArrivalsRequest) returns (GetArrivalsResponse);
+
+  // GET /transit/estimate  (auth: none)
+  rpc GetFareEstimate(GetFareEstimateRequest) returns (GetFareEstimateResponse);
+}

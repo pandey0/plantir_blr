@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package plantir.transit.v1;
+
+import "plantir/transit/v1/arrival.proto";
+
+message GetFareEstimateRequest {
+  string from = 1;
+  string to = 2;
+  TransitMode mode = 3;
+}
+
+message GetFareEstimateResponse {
+  int32 fare = 1;
+  string time = 2;
+}

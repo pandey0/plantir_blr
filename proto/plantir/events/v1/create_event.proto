@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package plantir.events.v1;
+
+import "plantir/events/v1/event.proto";
+
+message CreateEventRequest {
+  double latitude = 1;
+  double longitude = 2;
+  EventCategory category = 3;
+  optional string location = 4;
+}
+
+message CreateEventResponse {
+  bool success = 1;
+  string event_id = 2;
+}
