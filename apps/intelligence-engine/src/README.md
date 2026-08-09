@@ -8,13 +8,17 @@ Fastify 5 + TypeScript (ESM) backend. `app.ts` builds the configured Fastify ins
 
 | File/module | Responsibility | Doc |
 |---|---|---|
-| `app.ts` | Plugin registration, all route handlers (HTTP glue only for `/report` and `/events/:id/status` — they call into `events`/`ingestion`; `GET /events` still queries Prisma directly, reads aren't required to go through `events/`) | [`intelligence-engine.md`](../../../docs/api/intelligence-engine.md) for the routes it exposes |
+| `app.ts` | Plugin registration, all route handlers (HTTP glue only — every route calls into `events`/`ingestion`; no route touches Prisma directly, per `docs/standards/backend-engineering-standards.md`) | [`intelligence-engine.md`](../../../docs/api/intelligence-engine.md) for the routes it exposes |
 | `index.ts` | Bootstrap only — `buildApp()` + `.listen()`. Nothing else belongs here. | — |
-| `db.ts` | Shared `PrismaClient` singleton — every module imports this, none instantiate their own | — |
+| `db.ts` | Shared `PrismaClient` singleton (every module imports this, none instantiate their own) + the `Db` type (`typeof prisma \| Prisma.TransactionClient`) used by any function that must be able to run standalone or inside a caller's `$transaction` | — |
+| `errors.ts` | `sendError()` — the one place API error responses are shaped, `{ error: { code, message, details? } }` | [`../../docs/api/intelligence-engine.md`](../../docs/api/intelligence-engine.md)'s "Error responses" section |
+| `config.ts` | Zod-validated env config (`NODE_ENV`, `JWT_SECRET`, `CORS_ORIGINS`), fails fast at startup. Not `DATABASE_URL` — see [`../../docs/architecture/IMPLEMENTATION_NOTES.md`](../../docs/architecture/IMPLEMENTATION_NOTES.md) | — |
+| `index.ts` (bootstrap) | Also owns graceful shutdown (`SIGTERM`/`SIGINT` → `fastify.close()` → `prisma.$disconnect()`), not automated-tested — see [`../../docs/architecture/IMPLEMENTATION_NOTES.md`](../../docs/architecture/IMPLEMENTATION_NOTES.md) for how it was verified manually | — |
 | `ws/` | WebSocket connection hub + `broadcast()` | [`ws/README.md`](ws/README.md) |
-| `events/` | `createEvent()`, `updateStatus()` — the only code that writes to the `Event` table | [`events/README.md`](events/README.md) |
+| `events/` | `createEvent()` (incl. duplicate/corroboration detection), `updateStatus()`, `recalculateConfidence()` (multi-signal v2, the only code that writes to `Event`), `listEventsInRange()` (playback), `geo-query.ts`'s bbox/radius/ward/cluster/heatmap read queries, `list-cache.ts`'s request-coalescing cache, `prisma-enum.ts`'s Prisma⟷api-contracts boundary conversion | [`events/README.md`](events/README.md) |
 | `ingestion/` | `Source` adapters, `ingestEvent()` — normalizes raw input before calling `events.createEvent()` | [`ingestion/README.md`](ingestion/README.md) |
 | `transit.ts` | Transit-arrival and fare-estimate logic (fully mocked) | [`transit/README.md`](transit/README.md) |
+| `wards/` | Bangalore BBMP ward polygon lookup (static GeoJSON, loaded in memory) — backs `GET /v1/events?wardId=` | [`wards/README.md`](wards/README.md) |
 
 `routes/` (below) is the one piece of the originally-planned split that hasn't landed — route *registration* is still inline in `index.ts`, only the logic inside each handler has been extracted.
 

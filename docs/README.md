@@ -9,6 +9,21 @@ This is the entry point. Read this file first, then only the specific doc(s) bel
 | [`architecture/TECH_STACK.md`](architecture/TECH_STACK.md) | Tech stack per app, core architecture rules, decision log. **Major changes need user confirmation before implementation — read this before proposing one.** | System / rules |
 | [`architecture/REFERENCES.md`](architecture/REFERENCES.md) | Ideas pulled from external projects (currently: worldmonitor.app) and where each landed here | System / rules |
 | [`architecture/TESTING.md`](architecture/TESTING.md) | Testing framework, unit vs. integration tiers, what pre-commit runs | System / rules |
+| [`architecture/IMPLEMENTATION_NOTES.md`](architecture/IMPLEMENTATION_NOTES.md) | Gotchas, invariants, edge cases already handled, things deliberately deferred — read before assuming behavior, so nothing has to be re-derived by guessing | System / rules |
+| [`standards/backend-engineering-standards.md`](standards/backend-engineering-standards.md) | **Binding.** Layering, DTOs, transactions, error handling, security, testing, deployment. Applies to `intelligence-engine`. Formally audited — see `architecture/STANDARDS_COMPLIANCE.md`. | System / rules |
+| [`standards/frontend-engineering-standards.md`](standards/frontend-engineering-standards.md) | **Binding**, applies once frontend work resumes (`public-map`/`citizen-app`/`authority-portal` — untouched this session by deliberate scope). Component architecture, state, forms, a11y, performance. | System / rules |
+| [`standards/authentication-security-engineering-standards.md`](standards/authentication-security-engineering-standards.md) | **Binding.** AuthN/AuthZ, session/token handling, IDOR/BOLA, secrets management. | System / rules |
+| [`standards/http-networking-engineering-standards.md`](standards/http-networking-engineering-standards.md) | **Binding.** Timeouts, retries, headers, proxies, request size limits. | System / rules |
+| [`standards/sql-database-engineering-standards.md`](standards/sql-database-engineering-standards.md) | **Binding.** Schema design, indexing, migrations, query/transaction patterns. | System / rules |
+| [`standards/testing-engineering-standards.md`](standards/testing-engineering-standards.md) | **Binding.** Test tiers, naming, coverage philosophy. | System / rules |
+| [`standards/deployment-devops-engineering-standards.md`](standards/deployment-devops-engineering-standards.md) | **Binding.** Environments, CI/CD, releases, rollback — mostly forward-looking, nothing is deployed yet. | System / rules |
+| [`standards/linux-docker-cicd-engineering-standards.md`](standards/linux-docker-cicd-engineering-standards.md) | **Binding.** Containers, Dockerfiles, CI pipeline mechanics — no Dockerfile exists yet (deliberate, no deploy target chosen), CI itself is built (`.github/workflows/ci.yml`). | System / rules |
+| [`standards/observability-operations-engineering-standards.md`](standards/observability-operations-engineering-standards.md) | **Binding.** Logging, metrics, tracing, alerting, incident response. | System / rules |
+| [`standards/redis-queues-kafka-engineering-standards.md`](standards/redis-queues-kafka-engineering-standards.md) | **Binding when applicable — currently N/A**, no Redis/Kafka usage exists (`ioredis` is a provisioned-not-used dependency, see `TECH_STACK.md`). Don't add speculatively. | System / rules |
+| [`standards/ai-application-engineering-standards.md`](standards/ai-application-engineering-standards.md) | **Binding when applicable — currently N/A**, no AI/LLM features exist in this repo. | System / rules |
+| [`standards/system-design-engineering-standards.md`](standards/system-design-engineering-standards.md) | **Binding.** Capacity planning, scaling triggers, architecture trade-off framing. | System / rules |
+| [`standards/software-engineering-practices-standards.md`](standards/software-engineering-practices-standards.md) | **Binding.** General code quality — SOLID, DRY/KISS/YAGNI, naming, PR/commit hygiene. | System / rules |
+| [`architecture/STANDARDS_COMPLIANCE.md`](architecture/STANDARDS_COMPLIANCE.md) | Section-by-section audit of `intelligence-engine` against `standards/backend-engineering-standards.md` specifically — compliant / fixed / deliberately deferred, with reasons. **Only that one standard has a formal audit doc so far** — the other 12 above were read and applied ad hoc during the 2026-08-10 VISION-gap implementation round (see `TECH_STACK.md`'s decision log), not yet given the same section-by-section treatment. | System / rules |
 | [`api/README.md`](api/README.md) | Index of per-app API docs (each independent app that exposes an API gets its own file under `api/`) | API index |
 | [`api/intelligence-engine.md`](api/intelligence-engine.md) | Every HTTP/WS endpoint intelligence-engine exposes: method, path, auth, request/response shape | API |
 | [`../apps/intelligence-engine/src/README.md`](../apps/intelligence-engine/src/README.md) | intelligence-engine's internal file layout, current vs. planned module split | Component |
@@ -31,6 +46,7 @@ Apps are independent and stay that way in docs too: each app's internal module d
 - Change how events flow between components, add a new event source, change the confidence-scoring inputs → update `architecture/DATA_FLOW.md`.
 - Change which service owns what, add a new app, change a port/datastore → update `architecture/OVERVIEW.md`.
 - Add/move/rename files inside `apps/intelligence-engine/src/` → update that app's `src/README.md`.
+- Fix or deliberately defer a gap flagged in `architecture/STANDARDS_COMPLIANCE.md` → update that row's status in the same change.
 
 A doc that isn't true is worse than no doc — if you can't update it accurately in the same change, say so explicitly in the diff instead of leaving it stale.
 

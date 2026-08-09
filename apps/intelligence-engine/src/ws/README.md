@@ -6,13 +6,13 @@
 
 ## Purpose
 
-Push `NEW_EVENT` messages to every connected `public-map` client the moment an event is created or updated, so pulses appear on the map live instead of via polling.
+Push messages to every connected `public-map` client the moment an event is created or updated, so pulses/status changes appear on the map live instead of via polling.
 
 ## Current behavior (CURRENT)
 
 - `registerWsHub(fastify)`: one route, `GET /ws`, upgrades to a WebSocket, adds the socket to a module-level `Set<WebSocket>` called `connections`, removes it on `close`.
 - `broadcast(payload)`: `JSON.stringify`s the payload and calls `.send()` on every socket in `connections`, swallowing per-socket send errors so one dead socket doesn't break the loop.
-- Called from `events.createEvent()` (see [`../events/README.md`](../events/README.md)) after the write commits, always with `{ type: 'NEW_EVENT', payload: {...} }`. `events.updateStatus()` deliberately does not call it yet — see that doc.
+- Called from `events/` (see [`../events/README.md`](../events/README.md)) after a write commits — `createEvent()` sends `{ type: 'NEW_EVENT', payload: {...} }`, `updateStatus()` sends `{ type: 'EVENT_UPDATED', payload: { id, status, updated_at } }` (added 2026-08-09 — previously deferred for `public-map` compatibility, confirmed safe: `public-map`'s WS handler is a plain `if (data.type === 'NEW_EVENT')`, so an unrecognized type is silently ignored, not an error).
 
 ## Scaling ceiling — read before touching this
 
@@ -35,4 +35,4 @@ function broadcast(payload: object): void                 // called by events/ a
 
 ## Consumers
 
-`events/` calls `broadcast()`. `app.ts`'s `buildApp()` calls `registerWsHub(fastify)` once. Nothing else imports this module — route handlers never call `broadcast()` directly, always go through `events/` so every write path fans out consistently (once `updateStatus()` is wired up too, per that module's doc).
+`events/` calls `broadcast()`. `app.ts`'s `buildApp()` calls `registerWsHub(fastify)` once. Nothing else imports this module — route handlers never call `broadcast()` directly, always go through `events/` so every write path fans out consistently.

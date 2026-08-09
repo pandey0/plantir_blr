@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# docs/standards/backend-engineering-standards.md Section 33 (Deployment) requires CI.
+# Two jobs, matching the unit/integration split in docs/architecture/TESTING.md — unit tests
+# need no external services, integration tests need a real PostGIS instance. Kept separate so a
+# unit-test failure reports fast without waiting on the Postgres service container to boot.
+#
+# packages/api-contracts/src/generated/ (ts-proto output) is committed to git, so this workflow
+# does NOT run `npm run proto:generate` — regenerating is a local/manual step when a .proto
+# changes, not a CI concern. node_modules/.prisma/client is gitignored, so both jobs must run
+# `prisma generate` themselves.
+
+jobs:
+  build-and-unit-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate --schema packages/database/prisma/schema.prisma
+
+      - name: Typecheck
+        run: npm run build --workspace=apps/intelligence-engine --workspace=packages/api-contracts
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: API docs drift check
+        run: npm run docs:api:check
+
+  integration-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:15-3.3
+        env:
+          POSTGRES_USER: plantir_admin
+          POSTGRES_PASSWORD: plantir_secret_password
+          POSTGRES_DB: plantir_blr_db
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U plantir_admin -d plantir_blr_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      # packages/database/.env is gitignored (see docs/architecture/IMPLEMENTATION_NOTES.md for
+      # why Prisma's generated client loads DATABASE_URL from exactly this file, not process.env
+      # populated ahead of time) — CI has to write it itself, matching local dev's setup.
+      - name: Configure DATABASE_URL for the postgres service container
+        run: echo 'DATABASE_URL="postgresql://plantir_admin:plantir_secret_password@localhost:5433/plantir_blr_db"' > packages/database/.env
+
+      - name: Generate Prisma client
+        run: npx prisma generate --schema packages/database/prisma/schema.prisma
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy --schema packages/database/prisma/schema.prisma
+
+      - name: Build
+        run: npm run build --workspace=apps/intelligence-engine --workspace=packages/api-contracts
+
+      - name: Integration tests
+        run: npm run test:integration

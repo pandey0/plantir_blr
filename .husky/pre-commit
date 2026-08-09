@@ -2,3 +2,4 @@ node scripts/check-docs-reminder.mjs
 
 npm run build --workspace=apps/intelligence-engine --workspace=packages/api-contracts
 npm run test:unit
+npm run docs:api:check

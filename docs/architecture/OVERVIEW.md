@@ -7,7 +7,7 @@
 ## Topology
 
 ```
-┌────────────────┐   GET /events, WS /ws   ┌──────────────────────┐
+┌────────────────┐   GET /events*, WS /ws  ┌──────────────────────┐
 │  public-map     │◄───────────────────────┤                      │
 │  Next.js :3000  │                         │  intelligence-engine │
 └────────────────┘                         │  Fastify :3001        │
@@ -29,13 +29,14 @@
                                           └──────────────┘ │ today)│
                                                             └───────┘
 ```
+\* `public-map` calls the pre-`/v1` path (`GET /events`, unversioned) — **stale as of 2026-08-09**, the engine only serves `GET /v1/events` now. This is a known, deliberate gap: the engine was built ahead per its own docs/vision without waiting for `public-map` to catch up (see `TECH_STACK.md` decision log) — `public-map` needs a small update (its fetch URL and WS message handling) on its own turn, not fixed here.
 
 ## Apps
 
 | App | Status | Stack | Port | Notes |
 |---|---|---|---|---|
-| `apps/intelligence-engine` | CURRENT | Fastify 5, TypeScript (ESM), Prisma | 3001 | Only backend. Single instance, no auth, no horizontal scaling. See [`../../apps/intelligence-engine/src/README.md`](../../apps/intelligence-engine/src/README.md). |
-| `apps/public-map` | CURRENT | Next.js 14 (App Router), Leaflet | 3000 | Main UI. Reads `GET /events`, subscribes to `WS /ws` for live pulses. |
+| `apps/intelligence-engine` | CURRENT | Fastify 5, TypeScript (ESM), Prisma | 3001 | Only backend. Single instance, JWT+role auth, no horizontal scaling. See [`../../apps/intelligence-engine/src/README.md`](../../apps/intelligence-engine/src/README.md). |
+| `apps/public-map` | CURRENT, **stale against the engine's current API** | Next.js 14 (App Router), Leaflet | 3000 | Main UI. Calls the pre-`/v1` `GET /events` and doesn't handle the newer `EVENT_UPDATED` WS message — needs updating, not yet done (see note above the table). |
 | `apps/citizen-app` | PLANNED (stub only) | Vite + React | 3002 | Reporting interface. Not yet built. |
 | `apps/authority-portal` | PLANNED (stub only) | Vite + React | 3003 | Triage dashboard. Not yet built. |
 | `packages/database` | CURRENT | Prisma schema + migrations | — | Shared by engine only today. |

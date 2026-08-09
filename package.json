@@ -12,6 +12,7 @@
     "dev:map": "npm run dev --workspace=apps/public-map",
     "db:migrate": "npm run migrate --workspace=packages/database",
     "proto:generate": "cd proto && buf generate",
+    "docs:api:check": "npm run docs:api:check --workspace=apps/intelligence-engine",
     "prepare": "husky"
   },
   "keywords": [],

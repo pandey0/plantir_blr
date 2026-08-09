@@ -1,5 +1,4 @@
-import { z } from 'zod';
-import { EventCategory } from '@prisma/client';
+import { createEventRequestSchema, type EventCategory } from '@plantir/api-contracts';
 import { createEvent } from '../events/index.js';
 
 export interface EventInput {
@@ -18,18 +17,13 @@ export interface Source {
   normalize(raw: unknown): EventInput;
 }
 
-const citizenReportBodySchema = z.object({
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
-  category: z.nativeEnum(EventCategory),
-  location: z.string().optional(),
-});
-
 export const citizenReportSource: Source = {
   id: 'citizen-report',
   trustWeight: 1,
   normalize(raw: unknown): EventInput {
-    return citizenReportBodySchema.parse(raw);
+    // Shared with packages/api-contracts' future /v1 consumers — one schema, not a
+    // duplicate hand-written one. See that package's README.md.
+    return createEventRequestSchema.parse(raw);
   },
 };
 
@@ -40,6 +34,8 @@ export async function ingestEvent(source: Source, raw: unknown) {
     latitude: input.latitude,
     longitude: input.longitude,
     location: input.location,
+    reporterId: input.reporterId,
+    mediaUrls: input.mediaUrls,
     source: { id: source.id, trustWeight: source.trustWeight },
   });
 }

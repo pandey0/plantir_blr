@@ -5,8 +5,12 @@ import {
   createEventRequestSchema,
   listEventsRequestSchema,
   updateEventStatusRequestSchema,
+  getArrivalsRequestSchema,
+  getFareEstimateRequestSchema,
+  getEventClustersRequestSchema,
 } from './schemas.js';
 import { EventCategory, EventStatus } from './generated/plantir/events/v1/event.js';
+import { TransitMode } from './generated/plantir/transit/v1/arrival.js';
 
 describe('eventCategorySchema / eventStatusSchema', () => {
   it('accepts every generated enum value', () => {
@@ -58,6 +62,41 @@ describe('listEventsRequestSchema', () => {
   it('rejects a non-UUID cursor', () => {
     expect(listEventsRequestSchema.safeParse({ cursor: 'not-a-uuid' }).success).toBe(false);
   });
+
+  it('parses a valid bbox into its four components', () => {
+    const result = listEventsRequestSchema.parse({ bbox: '77.4,12.8,77.8,13.1' });
+    expect(result.bbox).toEqual({ minLng: 77.4, minLat: 12.8, maxLng: 77.8, maxLat: 13.1 });
+  });
+
+  it('rejects a bbox with the wrong number of components', () => {
+    expect(listEventsRequestSchema.safeParse({ bbox: '77.4,12.8,77.8' }).success).toBe(false);
+  });
+
+  it('rejects a bbox where min >= max', () => {
+    expect(listEventsRequestSchema.safeParse({ bbox: '77.8,12.8,77.4,13.1' }).success).toBe(false);
+  });
+
+  it('rejects a bbox with out-of-range coordinates', () => {
+    expect(listEventsRequestSchema.safeParse({ bbox: '-200,12.8,77.8,13.1' }).success).toBe(false);
+  });
+
+  it('accepts a valid radius query', () => {
+    const result = listEventsRequestSchema.parse({ lat: '12.9', lng: '77.6', radiusKm: '5' });
+    expect(result).toMatchObject({ lat: 12.9, lng: 77.6, radiusKm: 5 });
+  });
+
+  it('rejects radiusKm above the 50km cap', () => {
+    expect(listEventsRequestSchema.safeParse({ lat: 12.9, lng: 77.6, radiusKm: 51 }).success).toBe(false);
+  });
+
+  it('rejects bbox combined with a radius query', () => {
+    const result = listEventsRequestSchema.safeParse({ bbox: '77.4,12.8,77.8,13.1', lat: 12.9, lng: 77.6, radiusKm: 5 });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a partial radius query (missing radiusKm)', () => {
+    expect(listEventsRequestSchema.safeParse({ lat: 12.9, lng: 77.6 }).success).toBe(false);
+  });
 });
 
 describe('updateEventStatusRequestSchema', () => {
@@ -67,5 +106,52 @@ describe('updateEventStatusRequestSchema', () => {
 
   it('rejects a missing status', () => {
     expect(updateEventStatusRequestSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('getArrivalsRequestSchema', () => {
+  it('accepts a valid station/mode', () => {
+    expect(getArrivalsRequestSchema.safeParse({ station: 'MG Road', mode: TransitMode.METRO }).success).toBe(true);
+  });
+
+  it('rejects an empty station', () => {
+    expect(getArrivalsRequestSchema.safeParse({ station: '', mode: TransitMode.METRO }).success).toBe(false);
+  });
+
+  it('rejects an invalid mode', () => {
+    expect(getArrivalsRequestSchema.safeParse({ station: 'MG Road', mode: 'TRAIN' }).success).toBe(false);
+  });
+});
+
+describe('getFareEstimateRequestSchema', () => {
+  it('accepts a valid request', () => {
+    expect(
+      getFareEstimateRequestSchema.safeParse({ from: 'Majestic', to: 'Whitefield', mode: TransitMode.BUS }).success,
+    ).toBe(true);
+  });
+
+  it('rejects a missing "to"', () => {
+    expect(getFareEstimateRequestSchema.safeParse({ from: 'Majestic', mode: TransitMode.BUS }).success).toBe(false);
+  });
+});
+
+describe('getEventClustersRequestSchema', () => {
+  it('accepts a valid zoom with no bbox', () => {
+    const result = getEventClustersRequestSchema.safeParse({ zoom: '14' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a valid zoom with a bbox', () => {
+    const result = getEventClustersRequestSchema.safeParse({ zoom: 14, bbox: '77.4,12.8,77.8,13.1' });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a missing zoom', () => {
+    expect(getEventClustersRequestSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('rejects zoom below 1 or above 22', () => {
+    expect(getEventClustersRequestSchema.safeParse({ zoom: 0 }).success).toBe(false);
+    expect(getEventClustersRequestSchema.safeParse({ zoom: 23 }).success).toBe(false);
   });
 });

@@ -6,7 +6,7 @@
 >
 > **Ownership rule**: if a feature described here gets built, don't just leave it here as "vision" — add/update the relevant implementation doc (module `README.md`, `api/*.md`, or `DATA_FLOW.md`) and note here that it's shipped.
 >
-> **Known divergence to reconcile before implementing confidence scoring**: this doc describes a 0–100 *bucketed* confidence scale (Low/Moderate/High/Critical below) with reporter/evidence/spatial/temporal/authority signals. [`../../apps/intelligence-engine/src/events/README.md`](../../apps/intelligence-engine/src/events/README.md) and root `CLAUDE.md` describe a simpler *additive* formula (+20/unique reporter, +30/media, −50/fraud-flag) with no spatial/temporal signals. These are not yet reconciled — do not implement confidence scoring against either doc without resolving this first (a `PROPOSED` entry in [`../architecture/TECH_STACK.md`](../architecture/TECH_STACK.md) if the resolution changes the already-logged formula).
+> **Divergence resolved 2026-08-10**: the engine now implements this doc's multi-signal model (Confidence Engine v2 — reporter/evidence/spatial/temporal/authority signals, 0–100 clamped). See [`../../apps/intelligence-engine/src/events/README.md`](../../apps/intelligence-engine/src/events/README.md) for the exact weights and [`../architecture/TECH_STACK.md`](../architecture/TECH_STACK.md)'s decision log for the reversal of the earlier additive-formula decision. **Weights are defaults, not calibrated** — there's no production usage yet to tune them against; calibration is explicitly deferred to beta, not pre-beta guesswork.
 
 ## Overview
 
@@ -273,6 +273,8 @@ Example timeline:
 
 # Event Confidence Engine
 
+> **Shipped 2026-08-10** (engine side): see [`../../apps/intelligence-engine/src/events/README.md`](../../apps/intelligence-engine/src/events/README.md) for the implemented signal weights. Spatial + temporal signals are expressed as an *eligibility gate* for the reporter signal (see Fraud Prevention below), not separate additive terms — documented there, not a missing signal.
+
 Each event is assigned a **confidence score (0–100)**.
 
 Confidence determines event visibility and severity.
@@ -382,6 +384,8 @@ Green    – resolved
 
 # Clustering System
 
+> **Shipped 2026-08-09** (engine side): `GET /v1/events/clusters?zoom=&bbox=` — see [`../api/intelligence-engine.md`](../api/intelligence-engine.md) and [`../../apps/intelligence-engine/src/events/README.md`](../../apps/intelligence-engine/src/events/README.md). `public-map` consuming it to actually render cluster bubbles is still a separate, unbuilt frontend change.
+
 To prevent map clutter, events are clustered.
 
 Backend grid clustering groups nearby events.
@@ -405,6 +409,8 @@ Clusters expand as the user zooms.
 ---
 
 # Heatmap Layer
+
+> **Shipped 2026-08-10** (engine side): `GET /v1/events/heatmap?zoom=&bbox=` — see [`../api/intelligence-engine.md`](../api/intelligence-engine.md). Deliberately reuses the Clustering System's grid aggregation (same zoom→grid-size mapping) rather than a second implementation — see `geo-query.ts`'s `getHeatmapPoints()`. `public-map` actually rendering a heat layer from this is still a separate, unbuilt frontend change.
 
 Heatmaps represent **density of reports**.
 
@@ -443,6 +449,8 @@ The map does not re-render entirely.
 ---
 
 # Playback Mode
+
+> **Shipped 2026-08-10** (engine side): `GET /v1/events/playback?from=&to=&bbox=` returns events in the window ordered oldest-first, capped at 30 days and 1000 rows — see [`../api/intelligence-engine.md`](../api/intelligence-engine.md). The frontend timeline-animation UI itself is still unbuilt — this ships the data endpoint it would consume.
 
 The system also supports **historical playback**.
 
@@ -492,6 +500,11 @@ AI media verification
 ```
 
 Suspicious reports are penalized in the confidence engine.
+
+> **Partially shipped 2026-08-10** (engine side):
+> - **GPS validation**: `POST /v1/events` rejects coordinates outside a generous Bangalore-metro bounding box (400 `VALIDATION_ERROR`) — see `packages/api-contracts/src/schemas.ts`'s `createEventRequestSchema`.
+> - **Duplicate detection**: a same-category report within 150m and 6 hours of an existing non-terminal event attaches to it as a corroborating report instead of creating a second event — see [`../../apps/intelligence-engine/src/events/README.md`](../../apps/intelligence-engine/src/events/README.md).
+> - **Not built**: camera-only uploads (no upload pipeline exists at all — `mediaUrls` are caller-supplied URLs), user reputation scoring (no user accounts exist), AI media verification (no AI/media-analysis integration exists). These need real product decisions (an upload pipeline, an account system, a chosen AI provider) before they're buildable — not implementable as an engine-only change.
 
 ---
 
@@ -601,6 +614,7 @@ These automated signals would combine with citizen reports to create a **compreh
 Bangalore-specific context (folded in from the retired `PROJECT_PLAN.md`):
 
 * **Ward integration**: map event coordinates to Bangalore's 243 BBMP wards using GeoJSON polygons (`public-map` already loads `bbmp-wards.json` — see root `CLAUDE.md`'s Map layer system section for the current drill-down hierarchy this would extend).
+  > **Shipped 2026-08-10** (engine side, read-filtering only): `GET /v1/events?wardId=` filters events by ward polygon (225 of 243 wards have digitized boundaries in the source data) — see [`../../apps/intelligence-engine/src/wards/README.md`](../../apps/intelligence-engine/src/wards/README.md). This does not compute or store "which ward is this event in" on the `Event` row itself, and `public-map` consuming this filter for its drill-down UI is still a separate, unbuilt frontend change.
 * **Traffic correlation** (future, unscoped): overlay traffic data (Google Maps Traffic / TomTom) to show how road issues impact congestion. Not designed — do not build ahead of a concrete data source being identified.
 
 ---

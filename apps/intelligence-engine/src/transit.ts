@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { TransitMode } from '@plantir/api-contracts';
 
 // Intelligence Engine - Transit Adapter
 // Purpose: Fetch or simulate high-fidelity live transit data for Bangalore
@@ -12,7 +13,7 @@ export interface ArrivalData {
   platform?: string;
 }
 
-export async function fetchLiveArrivals(station: string, mode: 'METRO' | 'BUS'): Promise<ArrivalData[]> {
+export async function fetchLiveArrivals(station: string, mode: TransitMode): Promise<ArrivalData[]> {
   try {
     // Note: In a production environment, we would use the IUDX or Namma Yatri API keys here.
     // For this build, we use the public inquiry pattern.
@@ -69,7 +70,7 @@ export async function fetchLiveArrivals(station: string, mode: 'METRO' | 'BUS'):
 }
 
 // Logic to calculate dynamic fare based on Bangalore tiers
-export function calculateFare(from: string, to: string, mode: 'METRO' | 'BUS'): number {
+export function calculateFare(from: string, to: string, mode: TransitMode): number {
   // Simplistic distance-based logic for Bangalore
   // Majestic to Indiranagar ~ 10km -> ₹30
   // Majestic to Whitefield ~ 20km -> ₹45

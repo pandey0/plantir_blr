@@ -1,134 +1,230 @@
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, type FastifyError } from 'fastify';
 import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
 import websocket from '@fastify/websocket';
 import jwt from '@fastify/jwt';
+import rateLimit from '@fastify/rate-limit';
 import { z } from 'zod';
-import { EventCategory, EventStatus } from '@prisma/client';
+import {
+  EventCategory,
+  createEventRequestSchema,
+  listEventsRequestSchema,
+  updateEventStatusRequestSchema,
+  getArrivalsRequestSchema,
+  getFareEstimateRequestSchema,
+  getEventClustersRequestSchema,
+  getHeatmapRequestSchema,
+  getPlaybackRequestSchema,
+} from '@plantir/api-contracts';
 import { fetchLiveArrivals, calculateFare } from './transit.js';
-import { prisma } from './db.js';
 import { registerWsHub } from './ws/index.js';
-import { createEvent, updateStatus } from './events/index.js';
+import {
+  createEvent,
+  updateStatus,
+  listEvents,
+  listEventsInRange,
+  EventNotFoundError,
+  InvalidStatusTransitionError,
+} from './events/index.js';
+import {
+  findEventIdsInBbox,
+  findEventIdsInRadius,
+  findEventIdsInWard,
+  findEventClusters,
+  getHeatmapPoints,
+} from './events/geo-query.js';
+import { getOrFetch, cacheKey } from './events/list-cache.js';
 import { ingestEvent, citizenReportSource } from './ingestion/index.js';
+import { routeManifest, type Role } from './routes/manifest.js';
+import { sendError } from './errors.js';
+import { config } from './config.js';
 
-type Role = 'citizen' | 'authority';
+type Handler = (request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
 // Separated from index.ts's listen() call per Fastify's own testing pattern —
 // tests call buildApp() and use fastify.inject(), which needs no bound port.
 export function buildApp(): FastifyInstance {
   const fastify = Fastify({ logger: true });
 
-  const isProduction = process.env.NODE_ENV === 'production';
+  const isProduction = config.isProduction;
 
-  const allowedOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:3000,http://localhost:3002,http://localhost:3003')
-    .split(',')
-    .map((origin) => origin.trim());
-
-  fastify.register(cors, { origin: allowedOrigins });
+  fastify.register(cors, { origin: config.corsOrigins });
+  // Defaults are fine for a pure JSON/WS API (no HTML served) — no CSP tuning needed here.
+  fastify.register(helmet);
   fastify.register(websocket);
+  // global: false — most routes (reads, transit's mocked data) don't need limiting; only
+  // routes carrying a `rateLimit` entry in the manifest opt in via their route `config`.
+  fastify.register(rateLimit, { global: false });
 
-  if (!process.env.JWT_SECRET) {
-    if (isProduction) {
-      throw new Error('JWT_SECRET must be set in production');
-    }
+  // config.ts already fails fast at process startup if JWT_SECRET is missing in production
+  // (see docs/architecture/IMPLEMENTATION_NOTES.md) — this is just the dev-mode heads-up.
+  if (!config.jwtSecret) {
     fastify.log.warn('JWT_SECRET not set — using an insecure dev default. Set JWT_SECRET before deploying.');
   }
-  fastify.register(jwt, { secret: process.env.JWT_SECRET ?? 'dev-only-insecure-secret-change-me' });
+  fastify.register(jwt, { secret: config.jwtSecret ?? 'dev-only-insecure-secret-change-me' });
 
-  function requireRole(...roles: Role[]) {
+  function requireRole(roles: Role[]) {
     return async (request: any, reply: any) => {
       try {
         await request.jwtVerify();
       } catch {
-        return reply.status(401).send({ error: 'Unauthorized' });
+        return sendError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
       }
       const role = (request.user as { role?: Role })?.role;
       if (!role || !roles.includes(role)) {
-        return reply.status(403).send({ error: 'Forbidden' });
+        return sendError(reply, 403, 'FORBIDDEN', 'Forbidden');
       }
     };
   }
 
-  fastify.get('/health', async () => ({ status: 'ok' }));
+  // Safety net for anything NOT explicitly caught in a handler — per
+  // docs/standards/backend-engineering-standards.md Section 13, never leak internal error
+  // messages/stack traces to the client. Known 4xx from trusted plugins (e.g. @fastify/jwt's
+  // 401, @fastify/rate-limit's 429) pass their own message through wrapped in our shape — that
+  // message is plugin-authored, not internal state. Anything >=500 gets logged in full
+  // server-side and replaced with a generic client-facing message.
+  fastify.setErrorHandler((error: FastifyError, request, reply) => {
+    const statusCode = error.statusCode ?? 500;
+    if (statusCode >= 500) {
+      fastify.log.error(error);
+      return sendError(reply, 500, 'INTERNAL_ERROR', 'An unexpected error occurred');
+    }
+    return sendError(reply, statusCode, error.code ?? 'ERROR', error.message);
+  });
 
   registerWsHub(fastify);
 
-  // TRANSIT INTEL ENDPOINTS
-  fastify.get('/transit/arrivals', async (request, reply) => {
-    const { station, mode } = request.query as { station: string, mode: 'METRO' | 'BUS' };
-    if (!station || !mode) return reply.status(400).send({ error: 'Missing parameters' });
+  const idParamsSchema = z.object({ id: z.string().uuid() });
 
-    const arrivals = await fetchLiveArrivals(station, mode);
-    return arrivals;
-  });
+  const handlers: Record<string, Handler> = {
+    Health: async () => ({ status: 'ok' }),
 
-  fastify.get('/transit/estimate', async (request, reply) => {
-    const { from, to, mode } = request.query as { from: string, to: string, mode: 'METRO' | 'BUS' };
-    const fare = calculateFare(from, to, mode);
-    return { fare, time: '28 mins' };
-  });
+    ListEvents: async (request, reply) => {
+      const parsed = listEventsRequestSchema.safeParse(request.query);
+      if (!parsed.success) return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid query parameters', parsed.error.flatten());
+      const { cursor, limit, bbox, lat, lng, radiusKm, wardId } = parsed.data;
 
-  // EVENT LOGIC
-  const eventsQuerySchema = z.object({
-    cursor: z.string().uuid().optional(),
-    limit: z.coerce.number().int().min(1).max(100).default(50),
-  });
+      // Coalesces concurrent identical queries + short TTL cache — invalidated on every write,
+      // not left to expire, so this never serves stale-after-your-own-write data. See list-cache.ts.
+      return getOrFetch(cacheKey({ cursor, limit, bbox, lat, lng, radiusKm, wardId }), async () => {
+        let idFilter: string[] | undefined;
+        if (bbox) {
+          idFilter = await findEventIdsInBbox(bbox);
+        } else if (lat !== undefined && lng !== undefined && radiusKm !== undefined) {
+          idFilter = await findEventIdsInRadius(lat, lng, radiusKm);
+        } else if (wardId !== undefined) {
+          idFilter = await findEventIdsInWard(wardId);
+        }
+        // The actual query lives in events/index.ts's listEvents() — this handler's job is
+        // HTTP glue only (parse query, resolve spatial filter, shape response), never a direct
+        // Prisma call. See docs/architecture/STANDARDS_COMPLIANCE.md.
+        return listEvents({ cursor, limit, idFilter });
+      });
+    },
 
-  fastify.get('/events', async (request, reply) => {
-    const parsed = eventsQuerySchema.safeParse(request.query);
-    if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
-    const { cursor, limit } = parsed.data;
+    GetEventClusters: async (request, reply) => {
+      const parsed = getEventClustersRequestSchema.safeParse(request.query);
+      if (!parsed.success) return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid query parameters', parsed.error.flatten());
+      const { zoom, bbox } = parsed.data;
 
-    const events = await prisma.event.findMany({
-      where: { status: { not: 'FRAUD' } },
-      orderBy: [{ created_at: 'desc' }, { id: 'desc' }],
-      take: limit + 1,
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-    });
+      // Shares the same cache/invalidation infrastructure as ListEvents — a new event changes
+      // cluster counts too, so it must invalidate on the same writes. Distinct key prefix
+      // ("clusters:") keeps it from ever colliding with a ListEvents cache entry.
+      return getOrFetch(`clusters:${JSON.stringify({ zoom, bbox: bbox ?? null })}`, async () => {
+        const clusters = await findEventClusters(zoom, bbox);
+        return { clusters };
+      });
+    },
 
-    const hasMore = events.length > limit;
-    const page = hasMore ? events.slice(0, limit) : events;
-    return { events: page, nextCursor: hasMore ? page[page.length - 1].id : null };
-  });
+    GetHeatmap: async (request, reply) => {
+      const parsed = getHeatmapRequestSchema.safeParse(request.query);
+      if (!parsed.success) return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid query parameters', parsed.error.flatten());
+      const { zoom, bbox } = parsed.data;
 
-  const statusParamsSchema = z.object({ id: z.string().uuid() });
-  const statusBodySchema = z.object({ status: z.nativeEnum(EventStatus) });
+      // Same cache infrastructure as GetEventClusters, distinct key prefix — see
+      // getHeatmapPoints()'s doc comment for why this deliberately reuses cluster aggregation.
+      return getOrFetch(`heatmap:${JSON.stringify({ zoom, bbox: bbox ?? null })}`, async () => {
+        const points = await getHeatmapPoints(zoom, bbox);
+        return { points };
+      });
+    },
 
-  fastify.patch('/events/:id/status', { preHandler: requireRole('authority') }, async (request, reply) => {
-    const paramsParsed = statusParamsSchema.safeParse(request.params);
-    const bodyParsed = statusBodySchema.safeParse(request.body);
-    if (!paramsParsed.success || !bodyParsed.success) {
-      return reply.status(400).send({ error: 'Invalid request' });
-    }
-    return updateStatus(paramsParsed.data.id, bodyParsed.data.status);
-  });
+    GetEventsPlayback: async (request, reply) => {
+      const parsed = getPlaybackRequestSchema.safeParse(request.query);
+      if (!parsed.success) return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid query parameters', parsed.error.flatten());
+      const { from, to, bbox } = parsed.data;
 
-  fastify.post('/report', { preHandler: requireRole('citizen', 'authority') }, async (request, reply) => {
-    try {
-      const ev = await ingestEvent(citizenReportSource, request.body);
-      return { success: true, event_id: ev.id };
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        return reply.status(400).send({ error: err.flatten() });
+      // Not behind the request-coalescing cache: unlike the live feed/clusters, a playback
+      // window is a comparatively rare, wide, ad hoc query (arbitrary from/to) rather than a
+      // small set of viewport-driven queries repeated by many concurrent clients — caching it
+      // would mostly cache one-off entries the TTL never gets to reuse.
+      const idFilter = bbox ? await findEventIdsInBbox(bbox) : undefined;
+      const events = await listEventsInRange({ from, to, idFilter });
+      return { events };
+    },
+
+    CreateEvent: async (request, reply) => {
+      try {
+        const ev = await ingestEvent(citizenReportSource, request.body);
+        return { success: true, event_id: ev.id };
+      } catch (err) {
+        if (err instanceof z.ZodError) {
+          return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid request body', err.flatten());
+        }
+        throw err;
       }
-      throw err;
-    }
-  });
+    },
 
-  // Dev-only routes: not registered at all in production.
-  if (!isProduction) {
-    fastify.post('/dev/token', async (request, reply) => {
+    UpdateEventStatus: async (request, reply) => {
+      const paramsParsed = idParamsSchema.safeParse(request.params);
+      const bodyParsed = updateEventStatusRequestSchema.safeParse(request.body);
+      if (!paramsParsed.success || !bodyParsed.success) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid request', {
+          params: paramsParsed.success ? undefined : paramsParsed.error.flatten(),
+          body: bodyParsed.success ? undefined : bodyParsed.error.flatten(),
+        });
+      }
+      try {
+        return await updateStatus(paramsParsed.data.id, bodyParsed.data.status);
+      } catch (err) {
+        if (err instanceof EventNotFoundError) return sendError(reply, 404, 'EVENT_NOT_FOUND', err.message);
+        if (err instanceof InvalidStatusTransitionError) return sendError(reply, 409, 'INVALID_STATUS_TRANSITION', err.message);
+        throw err;
+      }
+    },
+
+    GetArrivals: async (request, reply) => {
+      const parsed = getArrivalsRequestSchema.safeParse(request.query);
+      if (!parsed.success) return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid query parameters', parsed.error.flatten());
+      return fetchLiveArrivals(parsed.data.station, parsed.data.mode);
+    },
+
+    GetFareEstimate: async (request, reply) => {
+      const parsed = getFareEstimateRequestSchema.safeParse(request.query);
+      if (!parsed.success) return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid query parameters', parsed.error.flatten());
+      const fare = calculateFare(parsed.data.from, parsed.data.to, parsed.data.mode);
+      return { fare, time: '28 mins' };
+    },
+
+    DevIssueToken: async (request, reply) => {
       const { role } = (request.body as { role?: Role }) ?? {};
       if (role !== 'citizen' && role !== 'authority') {
-        return reply.status(400).send({ error: "role must be 'citizen' or 'authority'" });
+        return sendError(reply, 400, 'VALIDATION_ERROR', "role must be 'citizen' or 'authority'");
       }
       const token = fastify.jwt.sign({ role }, { expiresIn: '2h' });
       return { token };
-    });
+    },
 
-    // Dev-only: inject a fake event to test the WS pipeline. Bypasses ingestion/ — it
-    // already produces normalized, valid data, there's no raw input to shape.
-    fastify.post('/dev/inject', async (request, reply) => {
-      const CATEGORIES: EventCategory[] = ['POTHOLE', 'GARBAGE', 'WATER_LOGGING', 'TRAFFIC_INCIDENT', 'STREET_LIGHT_FAILURE'];
+    // Bypasses ingestion/ — it already produces normalized, valid random data, there's no
+    // raw input to shape.
+    DevInjectEvent: async () => {
+      const CATEGORIES = [
+        EventCategory.POTHOLE,
+        EventCategory.GARBAGE,
+        EventCategory.WATER_LOGGING,
+        EventCategory.TRAFFIC_INCIDENT,
+        EventCategory.STREET_LIGHT_FAILURE,
+      ];
       const LOCATIONS = ['Koramangala', 'Indiranagar', 'Whitefield', 'Hebbal', 'Jayanagar', 'Majestic', 'BTM Layout'];
       const BLR_BOUNDS = { latMin: 12.85, latMax: 13.07, lngMin: 77.47, lngMax: 77.75 };
 
@@ -142,12 +238,34 @@ export function buildApp(): FastifyInstance {
         latitude,
         longitude,
         location,
+        // Synthetic reporter so injected events aren't all stuck at 0 confidence — this tool
+        // exists to make the dev experience realistic, a plausible score included.
+        reporterId: `dev-inject-${Math.random().toString(36).slice(2, 10)}`,
         source: { id: 'dev-inject', trustWeight: 0 },
       });
 
       return { injected: true, event_id: ev.id, category, location };
-    });
-  }
+    },
+  };
+
+  // Manifest-driven registration — see routes/README.md and routes/manifest.ts.
+  // Wrapped in fastify.after(): @fastify/rate-limit's per-route config (routeOpts.config.rateLimit
+  // below) is picked up by an 'onRoute' hook the plugin installs during its own async registration.
+  // Declaring routes synchronously right after `fastify.register(rateLimit, ...)` — without this —
+  // races that hook: the route gets declared before the plugin has finished loading, so the hook
+  // never sees it and the rate limit is silently never applied (no error, just doesn't work).
+  // fastify.after() guarantees this callback runs once every plugin registered above has loaded.
+  fastify.after(() => {
+    for (const entry of routeManifest) {
+      if (entry.devOnly && isProduction) continue;
+      const routeOpts = {
+        ...(entry.auth === 'none' ? {} : { preHandler: requireRole(entry.auth) }),
+        ...(entry.rateLimit ? { config: { rateLimit: entry.rateLimit } } : {}),
+      };
+      const method = entry.method.toLowerCase() as 'get' | 'post' | 'patch';
+      fastify[method](entry.path, routeOpts, handlers[entry.rpc]);
+    }
+  });
 
   return fastify;
 }

@@ -4,7 +4,7 @@
 
 ## Purpose
 
-The one shared, versioned definition of the engine's API contract: message shapes and enums generated from `proto/plantir/**/v1/*.proto` via `ts-proto`, plus hand-kept Zod schemas (`src/schemas.ts`) built on those same generated enums. Intended consumer: any app that needs to agree on `Event`/`EventCategory`/etc. shapes with `intelligence-engine` — today that's only the engine itself (partially, see below); `public-map`, `citizen-app`, `authority-portal` are future consumers once they need typed API calls instead of ad hoc `fetch`.
+The one shared, versioned definition of the engine's API contract: message shapes and enums generated from `proto/plantir/**/v1/*.proto` via `ts-proto`, plus hand-kept Zod schemas (`src/schemas.ts`) built on those same generated enums. Consumed by `intelligence-engine`'s `/v1/` routes since 2026-08-09 (see below); `public-map`, `citizen-app`, `authority-portal` are future consumers once they need typed API calls instead of ad hoc `fetch`.
 
 ## Regenerating
 
@@ -15,14 +15,14 @@ npm run build --workspace=packages/api-contracts
 
 `src/generated/` is generator output (`DO NOT EDIT` header on every file) — never hand-edit it, edit the `.proto` source and regenerate.
 
-## ⚠️ Not yet wired into `apps/intelligence-engine`'s current routes
+## Wired into `apps/intelligence-engine`'s routes (CURRENT, since 2026-08-09)
 
-This is deliberate, not an oversight. `index.ts`'s current (unversioned) routes still import `EventCategory`/`EventStatus` from `@prisma/client` and use hand-written Zod schemas inline — **not** this package. Two independently-generated enum types (`@prisma/client`'s and this package's) happen to share identical string values by design (see `proto/plantir/events/v1/event.proto`'s comment), but TypeScript string enums are nominally typed, not structurally — passing one where the other is expected requires a cast at the boundary. Rather than introduce that cast into working, tested code for no behavior change, the swap is deferred to the `/v1` route migration (see [`../../apps/intelligence-engine/src/routes/README.md`](../../apps/intelligence-engine/src/routes/README.md)), where routes move wholesale to this package's types anyway. Building against `import`s from `@prisma/client` today is unaffected and correct.
+`app.ts` and `ingestion/index.ts` use this package's generated types and `src/schemas.ts` directly for request validation and response typing. The enum boundary problem this deferred earlier — `@prisma/client`'s `EventCategory`/`EventStatus` are a *different* nominal TS type from this package's, despite identical string values — is solved at exactly one point: `apps/intelligence-engine/src/events/prisma-enum.ts`'s `toPrismaCategory`/`toPrismaStatus`, called only where `events/index.ts` talks to Prisma. Don't add another conversion site elsewhere; see [`../../docs/architecture/IMPLEMENTATION_NOTES.md`](../../docs/architecture/IMPLEMENTATION_NOTES.md#enum-boundary-prisma--api-contracts).
 
 ## What's here
 
 - `src/generated/plantir/{events,transit}/v1/*.ts` — ts-proto output. Enums generated as TS string enums (`stringEnums=true` in `proto/buf.gen.yaml`) so values are the literal strings (`"POTHOLE"`, not a proto zero-indexed number) — directly usable by `z.nativeEnum(...)`.
-- `src/schemas.ts` — Zod request schemas for the planned `/v1` routes, built on the generated enums.
+- `src/schemas.ts` — Zod request schemas for events and transit, built on the generated enums. Used directly by `intelligence-engine`'s `/v1/` routes.
 - `src/index.ts` — the package's public surface. Uses explicit named re-exports, not `export *` — ts-proto duplicates internal plumbing types (`DeepPartial`, `Exact`, `MessageFns`, `protobufPackage`) into every generated file, which collide under a wildcard re-export across multiple files. None of those are meaningful outside the generated code itself.
 
 ## Why no service/RPC-level codegen
