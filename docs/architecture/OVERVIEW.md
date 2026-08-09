@@ -7,29 +7,29 @@
 ## Topology
 
 ```
-┌────────────────┐   GET /events*, WS /ws  ┌──────────────────────┐
-│  public-map     │◄───────────────────────┤                      │
-│  Next.js :3000  │                         │  intelligence-engine │
-└────────────────┘                         │  Fastify :3001        │
-                                             │  (always-on, single   │
-┌────────────────┐   not yet built          │   instance)           │
-│  citizen-app    │- - - - - - - - - - - - -►│                      │
-│  Vite :3002     │                         │                      │
-└────────────────┘                         │                      │
-                                             │                      │
-┌────────────────┐   not yet built          │                      │
-│  authority-portal│- - - - - - - - - - - - ►│                      │
-│  Vite :3003     │                         └──────┬────────┬──────┘
-└────────────────┘                                │        │
-                                                    ▼        ▼
-                                          ┌──────────────┐ ┌───────┐
-                                          │ PostgreSQL   │ │ Redis │
-                                          │ + PostGIS    │ │ :6379 │
-                                          │ :5433        │ │(unused│
-                                          └──────────────┘ │ today)│
-                                                            └───────┘
+┌────────────────┐   GET /v1/events*, WS /ws  ┌──────────────────────┐
+│  public-map     │◄───────────────────────────┤                      │
+│  Next.js :3000  │                            │  intelligence-engine │
+└────────────────┘                            │  Fastify :3001        │
+                                                │  (always-on, single   │
+┌────────────────┐   not yet built             │   instance)           │
+│  citizen-app    │- - - - - - - - - - - - - - ►│                      │
+│  Vite :3002     │                            │                      │
+└────────────────┘                            │                      │
+                                                │                      │
+┌────────────────┐   not yet built             │                      │
+│  authority-portal│- - - - - - - - - - - - -  ►│                      │
+│  Vite :3003     │                            └──┬─────┬─────────┬──┘
+└────────────────┘                                │     │         │
+                                                    ▼     ▼         ▼
+                                          ┌──────────────┐┌───────┐┌─────────────────────────┐
+                                          │ PostgreSQL   ││ Redis ││ plantir-blr-data-service │
+                                          │ + PostGIS    ││ :6379 ││ FastAPI :8000             │
+                                          │ :5433        ││(unused││ (sibling repo, own git    │
+                                          └──────────────┘│ today)││  history — see below)     │
+                                                           └───────┘└─────────────────────────┘
 ```
-\* `public-map` calls the engine via `lib/api.ts`, all `/v1/` paths — adapted 2026-08-10 (was stale against the `/v1` migration before that; see `TECH_STACK.md` decision log).
+\* `public-map` calls the engine via `lib/api.ts`, all `/v1/` paths — adapted 2026-08-10 (was stale against the `/v1` migration before that; see `TECH_STACK.md` decision log). The engine's `transit.ts` calls `plantir-blr-data-service` for transit/geo reference data (landed 2026-08-10) — `public-map` never talks to that service directly, only through the engine, same as every other data source.
 
 ## Apps
 
@@ -45,6 +45,10 @@
 
 - **PostgreSQL + PostGIS**, host port **5433** mapped to the container's default **5432** (`docker-compose.yml` — was previously mis-mapped `5433:5433`, fixed 2026-08-09). Managed via `packages/database` (Prisma). The `geom GEOGRAPHY(POINT)` column (migration `20260809130000_add_event_geom`) is applied and verified end-to-end against a live database — see `api/intelligence-engine.md`.
 - **Redis**, port 6379. Provisioned (`ioredis` is a dependency, `docker-compose.yml` runs it) but **not currently used anywhere in the code**. Reserved for future rate-limiting and WebSocket fan-out once the engine runs >1 instance — see [`DATA_FLOW.md`](DATA_FLOW.md).
+
+## External services
+
+- **`plantir-blr-data-service`** (landed 2026-08-10) — FastAPI/Python, port 8000, **its own repo** (`../plantir-blr-data-service`, sibling directory to this monorepo — not an npm workspace, own git history, own language/stack). Serves Bangalore transit (arrivals, fare estimates) and geo reference data (BBMP wards, metro lines/stations) behind a provider interface designed so a real upstream can be plugged in later without touching this monorepo. `intelligence-engine`'s `transit.ts` is its only consumer (`DATA_SERVICE_URL` config var, defaults to `http://localhost:8000`) — see [`../../apps/intelligence-engine/src/transit/README.md`](../../apps/intelligence-engine/src/transit/README.md) and that service's own `README.md`. Currently mock data only (a faithful port of what used to be hardcoded in `transit.ts` directly), no real transit API wired in yet.
 
 ## Why one always-on backend, not serverless/edge
 
