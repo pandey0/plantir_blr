@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, type Event } from '@prisma/client';
 import { prisma, type Db } from '../db.js';
 import { getWardGeometry } from '../wards/index.js';
 
@@ -21,6 +21,34 @@ export interface Bbox {
   minLat: number;
   maxLng: number;
   maxLat: number;
+}
+
+export type EventWithCoordinates = Event & { latitude: number | null; longitude: number | null };
+
+// `geom` has no first-class Prisma field (schema.prisma's comment — no built-in PostGIS
+// support), so `prisma.event.findMany()` NEVER returns coordinates, even though they're
+// persisted. This was a real gap: every read endpoint (GET /v1/events, GET
+// /v1/events/playback) returned events with no way to actually place them on a map, discovered
+// while wiring up public-map's initial event hydration (2026-08-10) — bbox/radius/ward
+// filtering could query BY location, but the response never gave the caller the location back.
+// One extra batched raw-SQL query per page (not a JOIN inside the Prisma query, since Prisma
+// can't select a column it doesn't know about) — id list is already small (a page, `limit`
+// capped at 100) so this is cheap. `latitude`/`longitude` are `null` only if `geom` is null,
+// which shouldn't happen for any event created through createEvent() (always writes geom) —
+// defensive typing, not an expected case.
+export async function attachCoordinates<T extends { id: string }>(
+  events: T[],
+): Promise<(T & { latitude: number | null; longitude: number | null })[]> {
+  if (events.length === 0) return [];
+
+  const rows = await prisma.$queryRaw<{ id: string; lat: number | null; lng: number | null }[]>`
+    SELECT id, ST_Y(geom::geometry) as lat, ST_X(geom::geometry) as lng
+    FROM "Event"
+    WHERE id = ANY(${events.map((e) => e.id)})
+  `;
+  const coordsById = new Map(rows.map((r) => [r.id, { latitude: r.lat, longitude: r.lng }]));
+
+  return events.map((e) => ({ ...e, ...(coordsById.get(e.id) ?? { latitude: null, longitude: null }) }));
 }
 
 export async function findEventIdsInBbox(bbox: Bbox): Promise<string[]> {

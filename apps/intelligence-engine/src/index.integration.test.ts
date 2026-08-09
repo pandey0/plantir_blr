@@ -519,6 +519,16 @@ describe('GET /v1/events pagination', () => {
     expect(body.events.length).toBeLessThanOrEqual(1);
   });
 
+  it('includes latitude/longitude on returned events — geom is persisted but not a Prisma field, this was a real gap (see attachCoordinates())', async () => {
+    const eventId = await createTestEvent({ latitude: 12.9081, longitude: 77.6476 });
+    const res = await app.inject({ method: 'GET', url: '/v1/events?limit=100' });
+    expect(res.statusCode).toBe(200);
+    const event = JSON.parse(res.body).events.find((e: { id: string }) => e.id === eventId);
+    expect(event).toBeDefined();
+    expect(event.latitude).toBeCloseTo(12.9081, 4);
+    expect(event.longitude).toBeCloseTo(77.6476, 4);
+  });
+
   it('rejects a limit above 100', async () => {
     const res = await app.inject({ method: 'GET', url: '/v1/events?limit=101' });
     expect(res.statusCode).toBe(400);
@@ -678,9 +688,26 @@ describe('POST /v1/events duplicate/corroboration detection', () => {
 });
 
 describe('POST /v1/events GPS validation', () => {
+  // Own buildApp() instance — same rate-limit-budget reason as the other dedicated-app blocks.
+  // See docs/architecture/IMPLEMENTATION_NOTES.md#rate-limiting. Rejected requests still count
+  // against the bucket (the rate-limit hook fires before auth/validation), so even a single
+  // extra POST added to the SHARED `app` instance can push an unrelated later test over budget
+  // — this describe block originally did exactly that and broke 10 other tests in this file.
+  let gpsApp: FastifyInstance;
+
+  beforeAll(async () => {
+    gpsApp = buildApp();
+    await gpsApp.ready();
+  });
+
+  afterAll(async () => {
+    await gpsApp.close();
+  });
+
   it('rejects coordinates far outside the Bangalore metro area with 400', async () => {
-    const token = await mintToken('citizen');
-    const res = await app.inject({
+    const tokenRes = await gpsApp.inject({ method: 'POST', url: '/dev/token', payload: { role: 'citizen' } });
+    const token = JSON.parse(tokenRes.body).token;
+    const res = await gpsApp.inject({
       method: 'POST',
       url: '/v1/events',
       headers: { authorization: `Bearer ${token}` },
@@ -749,36 +776,55 @@ describe('GET /v1/events wardId filtering', () => {
 });
 
 describe('GET /v1/events/playback', () => {
+  // Own buildApp() instance — same rate-limit-budget reason as the other dedicated-app blocks.
+  // See docs/architecture/IMPLEMENTATION_NOTES.md#rate-limiting.
+  let playbackApp: FastifyInstance;
+  const playbackEventIds: string[] = [];
+
+  beforeAll(async () => {
+    playbackApp = buildApp();
+    await playbackApp.ready();
+  });
+
+  afterAll(async () => {
+    await prisma.event.deleteMany({ where: { id: { in: playbackEventIds } } });
+    await playbackApp.close();
+  });
+
   it('returns events within the time window in ascending created_at order', async () => {
-    const token = await mintToken('citizen');
-    const first = await app.inject({
+    const tokenRes = await playbackApp.inject({ method: 'POST', url: '/dev/token', payload: { role: 'citizen' } });
+    const token = JSON.parse(tokenRes.body).token;
+    const first = await playbackApp.inject({
       method: 'POST',
       url: '/v1/events',
       headers: { authorization: `Bearer ${token}` },
       payload: { latitude: 12.93, longitude: 77.61, category: 'GARBAGE' },
     });
     const firstId = JSON.parse(first.body).event_id;
-    createdEventIds.push(firstId);
+    playbackEventIds.push(firstId);
 
     const from = new Date(Date.now() - 60_000).toISOString();
     const to = new Date(Date.now() + 60_000).toISOString();
-    const res = await app.inject({ method: 'GET', url: `/v1/events/playback?from=${from}&to=${to}` });
+    const res = await playbackApp.inject({ method: 'GET', url: `/v1/events/playback?from=${from}&to=${to}` });
     expect(res.statusCode).toBe(200);
     const { events } = JSON.parse(res.body);
     expect(events.map((e: { id: string }) => e.id)).toContain(firstId);
+    const found = events.find((e: { id: string }) => e.id === firstId);
+    expect(found.latitude).toBeCloseTo(12.93, 4);
+    expect(found.longitude).toBeCloseTo(77.61, 4);
   });
 
   it('rejects "to" before "from" with 400', async () => {
     const to = new Date(Date.now() - 60_000).toISOString();
     const from = new Date().toISOString();
-    const res = await app.inject({ method: 'GET', url: `/v1/events/playback?from=${from}&to=${to}` });
+    const res = await playbackApp.inject({ method: 'GET', url: `/v1/events/playback?from=${from}&to=${to}` });
     expect(res.statusCode).toBe(400);
   });
 
   it('rejects a window wider than 30 days with 400', async () => {
     const from = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString();
     const to = new Date().toISOString();
-    const res = await app.inject({ method: 'GET', url: `/v1/events/playback?from=${from}&to=${to}` });
+    const res = await playbackApp.inject({ method: 'GET', url: `/v1/events/playback?from=${from}&to=${to}` });
     expect(res.statusCode).toBe(400);
   });
 });

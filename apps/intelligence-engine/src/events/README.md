@@ -84,16 +84,20 @@ async function listEvents(input: {
   cursor?: string;
   limit: number;
   idFilter?: string[];   // pre-computed by geo-query.ts when a spatial filter is present
-}): Promise<{ events: Event[]; nextCursor: string | null }>
+}): Promise<{ events: EventWithCoordinates[]; nextCursor: string | null }>   // EventWithCoordinates = Event & { latitude, longitude }, see attachCoordinates() below
 
 async function listEventsInRange(input: {
   from: Date;
   to: Date;
   idFilter?: string[];   // bbox-derived, from geo-query.ts's findEventIdsInBbox — no radius/ward filter on playback today
-}): Promise<Event[]>   // ascending created_at order, capped at 1000 rows — backs GET /v1/events/playback
+}): Promise<EventWithCoordinates[]>   // ascending created_at order, capped at 1000 rows — backs GET /v1/events/playback
 ```
 
 Both `createEvent()` and `updateStatus()` call `ws.broadcast()` after their write commits — `createEvent()` with `{ type: 'NEW_EVENT', ... }`, `updateStatus()` with `{ type: 'EVENT_UPDATED', payload: { id, status, updated_at } }` (added 2026-08-09 — previously deferred for `public-map` compatibility; confirmed safe since `public-map`'s WS handler is a plain `if (data.type === 'NEW_EVENT')` that ignores anything else. `public-map` rendering `EVENT_UPDATED` on the map is still its own future change.)
+
+## Coordinates on read (`attachCoordinates()`, landed 2026-08-10)
+
+**Real gap, not a design choice**: `geom` has no first-class Prisma field (`schema.prisma`'s comment — no built-in PostGIS support), so `prisma.event.findMany()` never returned coordinates even though they're persisted — `GET /v1/events` and `GET /v1/events/playback` could be *filtered* by location (bbox/radius/ward) but never told the caller *where* a returned event actually was. Found while wiring up `public-map`'s initial event hydration — the map had nothing to plot. `geo-query.ts`'s `attachCoordinates()` does one batched raw-SQL query (`ST_X`/`ST_Y`, `WHERE id = ANY(...)`) per page after the Prisma query, merging `latitude`/`longitude` onto each event. Both `listEvents()` and `listEventsInRange()` call it now. `null` only if `geom` itself is `null`, which shouldn't happen for anything created through `createEvent()` — defensive typing, not an expected case.
 
 ## Spatial reads (`geo-query.ts`, CURRENT)
 

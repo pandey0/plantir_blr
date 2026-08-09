@@ -44,7 +44,7 @@ WebSocket upgrade, not under `/v1`. Server pushes two message types to every con
 No client→server messages are consumed. See [`../../apps/intelligence-engine/src/ws/README.md`](../../apps/intelligence-engine/src/ws/README.md).
 
 ### `GET /v1/events?cursor=&limit=&bbox=|lat=&lng=&radiusKm=|wardId=`
-Public, no auth. Returns events where `status != 'FRAUD'`, ordered `created_at desc, id desc`. Cursor-paginated: `limit` (1–100, default 50), `cursor` (an event `id`, optional). Response: `{ events: Event[], nextCursor: string | null }`. `nextCursor` is `null` on the last page.
+Public, no auth. Returns events where `status != 'FRAUD'`, ordered `created_at desc, id desc`. Cursor-paginated: `limit` (1–100, default 50), `cursor` (an event `id`, optional). Response: `{ events: Event[], nextCursor: string | null }`, where each event includes `latitude`/`longitude` (landed 2026-08-10 — `attachCoordinates()`, see [`../architecture/IMPLEMENTATION_NOTES.md`](../architecture/IMPLEMENTATION_NOTES.md); previously the response had no coordinates at all despite `geom` being persisted). `nextCursor` is `null` on the last page.
 
 Three mutually exclusive spatial filters (400 if more than one given):
 - `bbox=minLng,minLat,maxLng,maxLat` — viewport filtering, `ST_Within` against a `ST_MakeEnvelope`.
@@ -64,7 +64,7 @@ Grid-size-to-degrees conversion uses a fixed Bangalore reference latitude, not a
 Public, no auth. Same params as `GET /v1/events/clusters` (identical schema, kept separate per [`docs/product/VISION.md`](../product/VISION.md)'s distinct Heatmap Layer section). Response: `{ points: [{ latitude, longitude, weight }] }`. Deliberately reuses cluster grid aggregation internally — `weight` is the same as a cluster's `count` — see `events/geo-query.ts`'s `getHeatmapPoints()`. `public-map` actually rendering a heat layer from this is a separate, unbuilt frontend change.
 
 ### `GET /v1/events/playback?from=&to=&bbox=` (landed 2026-08-10)
-Public, no auth. Per [`docs/product/VISION.md`](../product/VISION.md)'s Playback Mode. `from`/`to` are ISO 8601 datetimes, `to` must be after `from`, window capped at 30 days. `bbox` optional, same format as elsewhere. Response: `{ events: Event[] }`, ordered `created_at asc` (oldest first, for chronological timeline animation) — no cursor, capped at 1000 rows (`PLAYBACK_MAX_EVENTS`). Not behind the request-coalescing cache — playback queries are ad hoc/wide rather than the small set of repeated viewport queries the cache is tuned for.
+Public, no auth. Per [`docs/product/VISION.md`](../product/VISION.md)'s Playback Mode. `from`/`to` are ISO 8601 datetimes, `to` must be after `from`, window capped at 30 days. `bbox` optional, same format as elsewhere. Response: `{ events: Event[] }` (each including `latitude`/`longitude`, same as `GET /v1/events` — see above), ordered `created_at asc` (oldest first, for chronological timeline animation) — no cursor, capped at 1000 rows (`PLAYBACK_MAX_EVENTS`). Not behind the request-coalescing cache — playback queries are ad hoc/wide rather than the small set of repeated viewport queries the cache is tuned for.
 
 ### `PATCH /v1/events/:id/status`
 **Auth: `authority` role required.** Body: `{ status: EventStatus }`. `id` must be a UUID, `status` one of `REPORTED | VERIFIED | ESCALATED | IN_PROGRESS | RESOLVED | FRAUD` — both Zod-validated, 400 on failure.

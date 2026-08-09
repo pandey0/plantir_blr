@@ -4,7 +4,7 @@ import { prisma, type Db } from '../db.js';
 import { broadcast } from '../ws/index.js';
 import { toPrismaCategory, toPrismaStatus } from './prisma-enum.js';
 import { invalidate as invalidateListCache } from './list-cache.js';
-import { findDuplicateCandidateEventId } from './geo-query.js';
+import { findDuplicateCandidateEventId, attachCoordinates, type EventWithCoordinates } from './geo-query.js';
 
 export interface CreateEventInput {
   category: ApiEventCategory;
@@ -25,7 +25,7 @@ export interface ListEventsInput {
 }
 
 export interface ListEventsResult {
-  events: Event[];
+  events: EventWithCoordinates[];
   nextCursor: string | null;
 }
 
@@ -56,7 +56,7 @@ export async function listEvents(input: ListEventsInput): Promise<ListEventsResu
 
   const hasMore = events.length > limit;
   const page = hasMore ? events.slice(0, limit) : events;
-  return { events: page, nextCursor: hasMore ? page[page.length - 1].id : null };
+  return { events: await attachCoordinates(page), nextCursor: hasMore ? page[page.length - 1].id : null };
 }
 
 export interface ListEventsInRangeInput {
@@ -74,14 +74,14 @@ export interface ListEventsInRangeInput {
 // spatial predicate.
 const PLAYBACK_MAX_EVENTS = 1000; // see docs/architecture/IMPLEMENTATION_NOTES.md — abuse/scan guard, same reasoning as listEventsRequestSchema's radiusKm cap.
 
-export async function listEventsInRange(input: ListEventsInRangeInput): Promise<Event[]> {
+export async function listEventsInRange(input: ListEventsInRangeInput): Promise<EventWithCoordinates[]> {
   const { from, to, idFilter } = input;
 
   if (idFilter && idFilter.length === 0) {
     return [];
   }
 
-  return prisma.event.findMany({
+  const events = await prisma.event.findMany({
     where: {
       status: { not: 'FRAUD' },
       created_at: { gte: from, lte: to },
@@ -90,6 +90,7 @@ export async function listEventsInRange(input: ListEventsInRangeInput): Promise<
     orderBy: [{ created_at: 'asc' }, { id: 'asc' }],
     take: PLAYBACK_MAX_EVENTS,
   });
+  return attachCoordinates(events);
 }
 
 // Confidence Engine v2 — multi-signal bucketed model, superseding the flat additive formula
